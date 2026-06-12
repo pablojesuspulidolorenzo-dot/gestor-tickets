@@ -1,0 +1,29 @@
+body {
+    font-family: system-ui, sans-serif;
+    margin: 2rem;
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+main {
+    max-width: 900px;
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+button {
+    padding: 0.6rem 1rem;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.ok {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    border-radius: 8px;
+}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Gestor Tickets</title>
+    <script src="/static/vendor/htmx/htmx.min.js"></script>
+    <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+    <main>
+        <h1>Gestor Tickets</h1>
+        <p>FastAPI + Jinja2 + HTMX funcionando.</p>
+
+        <ul>
+            <li>Entorno: {{ app_env }}</li>
+            <li>PostgreSQL host: {{ postgres_host }}</li>
+        </ul>
+
+        <button hx-get="/htmx/ping" hx-target="#resultado" hx-swap="innerHTML">
+            Probar HTMX
+        </button>
+
+        <div id="resultado"></div>
+    </main>
+</body>
+</html>
