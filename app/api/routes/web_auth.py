@@ -9,6 +9,18 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.versioning import get_version_metadata
+from app.services.ai_model_discovery_service import discover_models, validate_model
+from app.services.ai_settings_service import (
+    PROVIDER_PRESETS,
+    create_endpoint,
+    get_endpoint,
+    list_endpoints,
+    list_models,
+    list_validation_logs,
+    set_default_endpoint,
+    set_endpoint_active,
+    update_endpoint,
+)
 from app.services.collaborator_service import (
     create_local_collaborator,
     get_user_permissions,
@@ -934,6 +946,316 @@ def ingestion_run_now_web(
     return RedirectResponse(url="/ingestion", status_code=303)
 
 
+def _require_manage_ai(user: dict):
+    if not user.get("can_manage_ai"):
+        return RedirectResponse(url="/app", status_code=303)
+    return None
+
+
+def _parse_json_field(value: str | None, default: dict) -> dict:
+    value = (value or "").strip()
+    if not value:
+        return default
+    parsed = json.loads(value)
+    if not isinstance(parsed, dict):
+        raise ValueError("El campo JSON debe ser un objeto.")
+    return parsed
+
+
+def _ai_form_payload(
+    *,
+    name: str,
+    provider_kind: str,
+    base_url: str,
+    models_endpoint_path: str,
+    chat_endpoint_path: str,
+    api_key: str | None,
+    default_model: str | None,
+    manual_model: str | None,
+    is_active: str | None,
+    is_default: str | None,
+    timeout_seconds: int,
+    temperature: float,
+    top_p: float,
+    max_tokens: int,
+    enable_thinking: str | None,
+    daily_limit: int | None,
+    free_quota_notes: str | None,
+    retry_policy_json: str | None,
+    extra_headers_json: str | None,
+    keep_existing_api_key: bool = True,
+) -> dict:
+    selected_model = (manual_model or "").strip() or (default_model or "").strip() or None
+    return {
+        "name": name,
+        "provider_kind": provider_kind,
+        "base_url": base_url,
+        "models_endpoint_path": models_endpoint_path,
+        "chat_endpoint_path": chat_endpoint_path,
+        "api_key": api_key.strip() if api_key and api_key.strip() else None,
+        "keep_existing_api_key": keep_existing_api_key,
+        "default_model": selected_model,
+        "is_active": bool(is_active),
+        "is_default": bool(is_default),
+        "timeout_seconds": timeout_seconds,
+        "temperature": temperature,
+        "top_p": top_p,
+        "max_tokens": max_tokens,
+        "enable_thinking": bool(enable_thinking),
+        "daily_limit": daily_limit,
+        "free_quota_notes": free_quota_notes,
+        "retry_policy_json": _parse_json_field(retry_policy_json, {
+            "max_retries": 1,
+            "retry_on": ["timeout", "connection_error", "rate_limited"],
+            "do_not_retry_on": ["auth_error", "quota_exceeded", "model_not_found", "invalid_request"],
+        }),
+        "extra_headers_json": _parse_json_field(extra_headers_json, {}),
+    }
+
+
+@router.get("/settings/ai", response_class=HTMLResponse)
+def ai_settings_page(request: Request, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    endpoints = list_endpoints(db)
+    selected_endpoint_id = request.query_params.get("endpoint_id")
+    selected_endpoint = None
+    models = []
+    validation_logs = []
+    if selected_endpoint_id:
+        try:
+            selected_endpoint = get_endpoint(db, int(selected_endpoint_id))
+            models = list_models(db, int(selected_endpoint_id))
+            validation_logs = list_validation_logs(db, int(selected_endpoint_id))
+        except ValueError:
+            selected_endpoint = None
+
+    if selected_endpoint is None and endpoints:
+        selected_endpoint = endpoints[0]
+        models = list_models(db, int(selected_endpoint["id"]))
+        validation_logs = list_validation_logs(db, int(selected_endpoint["id"]))
+
+    return templates.TemplateResponse(
+        request=request,
+        name="ai_settings.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="ai_settings",
+            endpoints=endpoints,
+            selected_endpoint=selected_endpoint,
+            models=models,
+            validation_logs=validation_logs,
+            provider_presets=PROVIDER_PRESETS,
+            error=request.query_params.get("error"),
+            message=request.query_params.get("message"),
+        ),
+    )
+
+
+@router.post("/settings/ai/endpoints", response_class=HTMLResponse)
+def ai_create_endpoint_web(
+    request: Request,
+    name: str = Form(...),
+    provider_kind: str = Form("generic"),
+    base_url: str = Form(...),
+    models_endpoint_path: str = Form("/models"),
+    chat_endpoint_path: str = Form("/chat/completions"),
+    api_key: str | None = Form(None),
+    default_model: str | None = Form(None),
+    manual_model: str | None = Form(None),
+    is_active: str | None = Form(None),
+    is_default: str | None = Form(None),
+    timeout_seconds: int = Form(60),
+    temperature: float = Form(0.2),
+    top_p: float = Form(1.0),
+    max_tokens: int = Form(1024),
+    enable_thinking: str | None = Form(None),
+    daily_limit: int | None = Form(None),
+    free_quota_notes: str | None = Form(None),
+    retry_policy_json: str | None = Form(None),
+    extra_headers_json: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    try:
+        endpoint = create_endpoint(
+            db,
+            _ai_form_payload(
+                name=name,
+                provider_kind=provider_kind,
+                base_url=base_url,
+                models_endpoint_path=models_endpoint_path,
+                chat_endpoint_path=chat_endpoint_path,
+                api_key=api_key,
+                default_model=default_model,
+                manual_model=manual_model,
+                is_active=is_active,
+                is_default=is_default,
+                timeout_seconds=timeout_seconds,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                enable_thinking=enable_thinking,
+                daily_limit=daily_limit,
+                free_quota_notes=free_quota_notes,
+                retry_policy_json=retry_policy_json,
+                extra_headers_json=extra_headers_json,
+                keep_existing_api_key=False,
+            ),
+        )
+        return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint['id']}&message=created", status_code=303)
+    except ValueError:
+        return RedirectResponse(url="/settings/ai?error=save_error", status_code=303)
+
+
+@router.post("/settings/ai/endpoints/{endpoint_id}", response_class=HTMLResponse)
+def ai_update_endpoint_web(
+    request: Request,
+    endpoint_id: int,
+    name: str = Form(...),
+    provider_kind: str = Form("generic"),
+    base_url: str = Form(...),
+    models_endpoint_path: str = Form("/models"),
+    chat_endpoint_path: str = Form("/chat/completions"),
+    api_key: str | None = Form(None),
+    default_model: str | None = Form(None),
+    manual_model: str | None = Form(None),
+    is_active: str | None = Form(None),
+    is_default: str | None = Form(None),
+    timeout_seconds: int = Form(60),
+    temperature: float = Form(0.2),
+    top_p: float = Form(1.0),
+    max_tokens: int = Form(1024),
+    enable_thinking: str | None = Form(None),
+    daily_limit: int | None = Form(None),
+    free_quota_notes: str | None = Form(None),
+    retry_policy_json: str | None = Form(None),
+    extra_headers_json: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    try:
+        update_endpoint(
+            db,
+            endpoint_id,
+            _ai_form_payload(
+                name=name,
+                provider_kind=provider_kind,
+                base_url=base_url,
+                models_endpoint_path=models_endpoint_path,
+                chat_endpoint_path=chat_endpoint_path,
+                api_key=api_key,
+                default_model=default_model,
+                manual_model=manual_model,
+                is_active=is_active,
+                is_default=is_default,
+                timeout_seconds=timeout_seconds,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                enable_thinking=enable_thinking,
+                daily_limit=daily_limit,
+                free_quota_notes=free_quota_notes,
+                retry_policy_json=retry_policy_json,
+                extra_headers_json=extra_headers_json,
+            ),
+        )
+        return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&message=updated", status_code=303)
+    except ValueError:
+        return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&error=save_error", status_code=303)
+
+
+@router.post("/settings/ai/endpoints/{endpoint_id}/discover-models", response_class=HTMLResponse)
+def ai_discover_models_web(request: Request, endpoint_id: int, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    try:
+        discover_models(db, endpoint_id)
+        return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&message=models", status_code=303)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&error={str(exc)}", status_code=303)
+
+
+@router.post("/settings/ai/endpoints/{endpoint_id}/validate-model", response_class=HTMLResponse)
+def ai_validate_model_web(
+    request: Request,
+    endpoint_id: int,
+    model_id: str | None = Form(None),
+    manual_model: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    try:
+        validate_model(db, endpoint_id, (manual_model or "").strip() or model_id)
+        return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&message=validated", status_code=303)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&error={str(exc)}", status_code=303)
+
+
+@router.post("/settings/ai/endpoints/{endpoint_id}/set-default", response_class=HTMLResponse)
+def ai_set_default_web(request: Request, endpoint_id: int, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    set_default_endpoint(db, endpoint_id)
+    return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&message=default", status_code=303)
+
+
+@router.post("/settings/ai/endpoints/{endpoint_id}/disable", response_class=HTMLResponse)
+def ai_disable_endpoint_web(request: Request, endpoint_id: int, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    endpoint = get_endpoint(db, endpoint_id)
+    set_endpoint_active(db, endpoint_id, not endpoint["is_active"])
+    return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&message=active", status_code=303)
+
+
 def _selected_permissions(values: set[str]) -> dict[str, bool]:
     return {
         "can_manage_users": "can_manage_users" in values,
@@ -943,7 +1265,7 @@ def _selected_permissions(values: set[str]) -> dict[str, bool]:
         "can_create_glpi_ticket": "can_create_glpi_ticket" in values,
         "can_update_glpi_ticket": "can_update_glpi_ticket" in values,
         "can_link_tickets": "can_link_tickets" in values,
-        "can_manage_ai": False,
+        "can_manage_ai": "can_manage_ai" in values,
     }
 
 
