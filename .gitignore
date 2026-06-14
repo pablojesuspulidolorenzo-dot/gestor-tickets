@@ -1,9 +1,35 @@
-.env
-*.log
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Entornos locales
 .venv/
-node_modules/
-dist/
-build/
-.cache/
+venv/
+
+# Variables y secretos
+.env
+.env.*
+!.env.example
+
+# Datos persistentes y logs
+data/
+logs/
+*.log
+
+# Backups locales generados durante desarrollo asistido
+scripts/backups/
+
+# Archivos temporales
+*.tmp
+*.bak
+*.swp
 .DS_Store
+
+# Dumps / esquemas generados manualmente
+*.backup.sql
+*.dump

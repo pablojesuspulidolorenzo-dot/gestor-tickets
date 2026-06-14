@@ -1,26 +1,58 @@
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <title>Gestor Tickets</title>
-    <script src="/static/vendor/htmx/htmx.min.js"></script>
-    <link rel="stylesheet" href="/static/css/app.css">
-</head>
-<body>
-    <main>
-        <h1>Gestor Tickets</h1>
-        <p>FastAPI + Jinja2 + HTMX funcionando.</p>
+{% extends "base.html" %}
 
-        <ul>
-            <li>Entorno: {{ app_env }}</li>
-            <li>PostgreSQL host: {{ postgres_host }}</li>
-        </ul>
+{% block title %}Gestor Tickets{% endblock %}
 
-        <button hx-get="/htmx/ping" hx-target="#resultado" hx-swap="innerHTML">
-            Probar HTMX
-        </button>
+{% block content %}
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
 
-        <div id="resultado"></div>
-    </main>
-</body>
-</html>
+    <nav style="display: flex; gap: 8px; margin-left: 24px; flex: 1;">
+        <a href="/" class="nav-btn active">Inicio</a>
+        <a href="/health" class="nav-btn">Health</a>
+        <a href="/api/health" class="nav-btn">API Health</a>
+    </nav>
+
+    <div class="system-status">
+        <div class="status-badge prod">
+            <span class="badge-dot"></span>
+            Docker activo
+        </div>
+        <span class="version-text">{{ version.full }}</span>
+    </div>
+</header>
+
+<main class="app-container">
+    <section class="reading-ai-panel">
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">✉️</div>
+            <h2>Base del nuevo gestor de tickets preparada</h2>
+            <p class="pane-empty-text">
+                FastAPI está funcionando dentro del contenedor Docker y conectado a PostgreSQL.
+            </p>
+
+            <div
+                hx-get="/htmx/ping"
+                hx-target="#htmx-result"
+                hx-swap="innerHTML"
+                style="margin-top: 20px;"
+            >
+                <button class="nav-btn" style="cursor:pointer;">
+                    Probar HTMX
+                </button>
+            </div>
+
+            <div id="htmx-result" style="margin-top: 16px;"></div>
+
+            <pre style="margin-top: 24px; text-align: left; background: #f1f5f9; padding: 16px; border-radius: 8px; color: #334155; max-width: 780px; white-space: pre-wrap;">App: {{ app_name }}
+Entorno: {{ app_env }}
+PostgreSQL: {{ postgres_host }}
+Schema: {{ db_schema }}
+GLPI: {{ glpi_base_url }}
+Versión: {{ version.full }}</pre>
+        </div>
+    </section>
+</main>
+{% endblock %}

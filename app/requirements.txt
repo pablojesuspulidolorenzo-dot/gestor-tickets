@@ -3,6 +3,13 @@ uvicorn[standard]
 jinja2
 python-multipart
 python-dotenv
+pydantic-settings
 psycopg[binary]
 sqlalchemy
 httpx
+cryptography
+markdown
+bleach
+beautifulsoup4
+aiofiles
+itsdangerous
