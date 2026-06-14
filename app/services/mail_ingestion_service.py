@@ -356,6 +356,56 @@ def configure_mail_ingestion_job(
     return _job_summary(db, job_id=job_id)
 
 
+def reactivate_mail_ingestion_job(
+    db: Session,
+    *,
+    account_id: int,
+    user_id: int | None,
+) -> dict:
+    _get_account_email(db, account_id=account_id)
+
+    job_id = db.execute(
+        text("""
+            SELECT id
+            FROM gestor_tickets.mail_ingestion_jobs
+            WHERE account_id = :account_id
+            LIMIT 1
+        """),
+        {"account_id": account_id},
+    ).scalar_one_or_none()
+
+    if not job_id:
+        raise ValueError("No hay job de ingesta configurado para esta cuenta.")
+
+    db.execute(
+        text("""
+            UPDATE gestor_tickets.mail_ingestion_jobs
+            SET status = 'active',
+                auth_failure_count = 0,
+                last_error_message = NULL,
+                next_run_at = now(),
+                updated_by_user_id = :user_id,
+                updated_at = now()
+            WHERE id = :job_id
+        """),
+        {"job_id": job_id, "user_id": user_id},
+    )
+
+    db.execute(
+        text("""
+            UPDATE gestor_tickets.collaborative_accounts
+            SET status = 'active',
+                ingestion_enabled = true,
+                updated_at = now()
+            WHERE id = :account_id
+        """),
+        {"account_id": account_id},
+    )
+
+    db.commit()
+    return _job_summary(db, job_id=job_id)
+
+
 def _create_run(db: Session, *, job: dict) -> int:
     run_id = db.execute(
         text("""

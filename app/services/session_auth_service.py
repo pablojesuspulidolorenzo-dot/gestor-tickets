@@ -12,6 +12,9 @@ from app.services.audit_service import create_audit_log
 from app.services.glpi_service import GlpiService
 
 
+RECOVERABLE_ACCOUNT_STATUSES = {"active", "error_auth", "error_connection", "error_unknown"}
+
+
 @dataclass(frozen=True)
 class AuthenticatedSessionUser:
     account_id: int
@@ -80,8 +83,8 @@ async def authenticate_session_user(
             select(CollaborativeAccount).where(CollaborativeAccount.email == account_email)
         ).scalar_one_or_none()
 
-        if not account or account.status != "active":
-            raise ValueError("La cuenta colaborativa no existe o no está activa.")
+        if not account or account.status not in RECOVERABLE_ACCOUNT_STATUSES:
+            raise ValueError("La cuenta colaborativa no existe o no permite acceso.")
 
         user = db.execute(
             select(AccountUser).where(
@@ -133,8 +136,8 @@ async def authenticate_session_user(
         select(CollaborativeAccount).where(CollaborativeAccount.email == clean_login)
     ).scalar_one_or_none()
 
-    if not account or account.status != "active":
-        raise ValueError("La cuenta colaborativa no existe o no está activa.")
+    if not account or account.status not in RECOVERABLE_ACCOUNT_STATUSES:
+        raise ValueError("La cuenta colaborativa no existe o no permite acceso.")
 
     glpi_result = await GlpiService().validate_account_manager_login(
         login=account.glpi_login,

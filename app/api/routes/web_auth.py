@@ -27,6 +27,7 @@ from app.services.mail_ingestion_scheduler import get_mail_ingestion_scheduler_s
 from app.services.mail_ingestion_service import (
     configure_mail_ingestion_job,
     list_mail_ingestion_jobs,
+    reactivate_mail_ingestion_job,
     run_mail_ingestion_job,
 )
 from app.services.thread_service import (
@@ -692,6 +693,24 @@ def ingestion_configure_web(
         sent_folder_name=sent_folder_name,
         interval_minutes=interval_minutes,
         max_messages_per_folder=max_messages_per_folder,
+    )
+
+    return RedirectResponse(url="/ingestion", status_code=303)
+
+
+@router.post("/ingestion/reactivate", response_class=HTMLResponse)
+def ingestion_reactivate_web(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    reactivate_mail_ingestion_job(
+        db,
+        account_id=int(user["account_id"]),
+        user_id=int(user["user_id"]),
     )
 
     return RedirectResponse(url="/ingestion", status_code=303)

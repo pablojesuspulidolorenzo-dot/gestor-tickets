@@ -3,6 +3,14 @@
 {% block title %}Ingesta IMAP - Gestor Tickets{% endblock %}
 
 {% block content %}
+{% set job_in_error = job and job.status in ["error_auth", "error_connection", "error_unknown"] %}
+{% set job_status_labels = {
+    "active": "Activo",
+    "disabled": "Desactivado",
+    "error_auth": "Error de autenticación",
+    "error_connection": "Error de conexión",
+    "error_unknown": "Error desconocido"
+} %}
 <header class="app-header">
     <div class="logo-section">
         <div class="logo-icon">GT</div>
@@ -51,7 +59,7 @@
             <article class="message-item">
                 <div class="message-meta">
                     <span class="message-sender">Job #{{ job.id }}</span>
-                    <span>{{ job.status }}</span>
+                    <span>{{ job_status_labels.get(job.status, job.status) }}</span>
                 </div>
                 <div class="message-subject">
                     {{ job.inbox_folder_name }} / {{ job.sent_folder_name }}
@@ -114,8 +122,8 @@
                     <label class="form-label">
                         Estado
                         <select class="form-input" name="status">
-                            <option value="active" {% if job and job.status == "active" %}selected{% endif %}>active</option>
-                            <option value="disabled" {% if job and job.status == "disabled" %}selected{% endif %}>disabled</option>
+                            <option value="active" {% if job and job.status == "active" %}selected{% endif %}>Activo</option>
+                            <option value="disabled" {% if job and job.status == "disabled" %}selected{% endif %}>Desactivado</option>
                         </select>
                     </label>
 
@@ -154,6 +162,30 @@
             </section>
 
             {% if job %}
+            {% if job_in_error %}
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Ingesta detenida por error</h3>
+                <p class="pane-empty-text">
+                    Estado actual: {{ job_status_labels.get(job.status, job.status) }}.
+                </p>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">Fallos autenticación</div>
+                        <div class="info-value">{{ job.auth_failure_count }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Próxima ejecución</div>
+                        <div class="info-value">{{ job.next_run_at or "No programada" }}</div>
+                    </div>
+                </div>
+                {% if job.last_error_message %}
+                <p class="pane-empty-text">{{ job.last_error_message }}</p>
+                {% endif %}
+                <form method="post" action="/ingestion/reactivate">
+                    <button class="primary-button" type="submit">Reactivar ingesta</button>
+                </form>
+            </section>
+            {% else %}
             <section class="email-body-card">
                 <h3 style="margin-top: 0;">Ejecución manual</h3>
                 <p class="pane-empty-text">
@@ -163,6 +195,7 @@
                     <button class="primary-button" type="submit">Ejecutar ingesta ahora</button>
                 </form>
             </section>
+            {% endif %}
 
             <section class="email-body-card">
                 <h3 style="margin-top: 0;">Estado del job</h3>
