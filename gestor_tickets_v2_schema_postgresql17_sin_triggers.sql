@@ -199,9 +199,6 @@ CREATE TABLE collaborative_accounts (
     notes text,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
-
-    CONSTRAINT collaborative_account_glpi_login_matches_email
-        CHECK (lower(glpi_login::text) = lower(email::text)),
     CONSTRAINT collaborative_account_imap_config_complete_or_empty
         CHECK (
             (imap_host IS NULL AND imap_username IS NULL AND imap_password_ciphertext IS NULL)
