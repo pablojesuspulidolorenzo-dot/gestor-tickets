@@ -12,6 +12,60 @@ router = APIRouter()
 templates = Jinja2Templates(directory="/app/templates")
 
 
+SECTION_DEFINITIONS = {
+    "mailbox": {
+        "title": "Bandeja",
+        "icon": "📥",
+        "description": "Aquí se mostrará la bandeja unificada de la cuenta colaborativa.",
+        "next_steps": [
+            "Conectar lectura IMAP en modo seguro sin marcar correos como leídos.",
+            "Mostrar entrada y enviados de la cuenta colaborativa.",
+            "Preparar deduplicación por Message-ID y UID interno del sistema.",
+        ],
+    },
+    "threads": {
+        "title": "Hilos",
+        "icon": "🧵",
+        "description": "Aquí se mostrarán los hilos operativos del sistema.",
+        "next_steps": [
+            "Agrupar mensajes por referencias, asunto y reglas internas.",
+            "Permitir mover correos entre hilos.",
+            "Permitir fusionar hilos y mantener auditoría.",
+        ],
+    },
+    "tickets": {
+        "title": "Tickets GLPI",
+        "icon": "🎫",
+        "description": "Aquí se relacionarán correos e hilos con tickets de GLPI.",
+        "next_steps": [
+            "Consultar tickets GLPI desde la API.",
+            "Crear tickets desde correos seleccionados.",
+            "Relacionar múltiples correos e hilos con múltiples tickets.",
+        ],
+    },
+    "accounts": {
+        "title": "Cuentas",
+        "icon": "👥",
+        "description": "Aquí se gestionarán la cuenta colaborativa y sus colaboradores.",
+        "next_steps": [
+            "Mostrar la cuenta colaborativa activa.",
+            "Crear usuarios colaboradores locales.",
+            "Gestionar permisos por colaborador.",
+        ],
+    },
+    "settings": {
+        "title": "Configuración",
+        "icon": "⚙️",
+        "description": "Aquí se configurarán parámetros de correo, GLPI e IA.",
+        "next_steps": [
+            "Configurar acceso IMAP de la cuenta colaborativa.",
+            "Configurar prompts de IA.",
+            "Validar endpoints externos antes de guardar cambios.",
+        ],
+    },
+}
+
+
 def _template_context(request: Request, **extra):
     context = {
         "request": request,
@@ -27,6 +81,13 @@ def _template_context(request: Request, **extra):
 def get_session_user(request: Request) -> dict | None:
     user = request.session.get("user")
     return user if isinstance(user, dict) else None
+
+
+def require_session_user(request: Request) -> dict | RedirectResponse:
+    user = get_session_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=303)
+    return user
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -100,12 +161,36 @@ def logout_get(request: Request):
 
 @router.get("/app", response_class=HTMLResponse)
 def app_home(request: Request):
-    user = get_session_user(request)
-    if not user:
-        return RedirectResponse(url="/login", status_code=303)
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
 
     return templates.TemplateResponse(
         request=request,
         name="app_home.html",
-        context=_template_context(request, user=user),
+        context=_template_context(request, user=user, active_section="panel"),
+    )
+
+
+@router.get("/{section}", response_class=HTMLResponse)
+def protected_section(request: Request, section: str):
+    if section not in SECTION_DEFINITIONS:
+        return RedirectResponse(url="/app", status_code=303)
+
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    definition = SECTION_DEFINITIONS[section]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="section_page.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section=section,
+            section_key=section,
+            section=definition,
+        ),
     )

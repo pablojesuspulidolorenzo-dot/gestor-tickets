@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}{{ section.title }} - Gestor Tickets{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
+
+    <nav class="top-nav">
+        <a href="/app" class="nav-btn {% if active_section == 'panel' %}active{% endif %}">Panel</a>
+        <a href="/mailbox" class="nav-btn {% if active_section == 'mailbox' %}active{% endif %}">Bandeja</a>
+        <a href="/threads" class="nav-btn {% if active_section == 'threads' %}active{% endif %}">Hilos</a>
+        <a href="/tickets" class="nav-btn {% if active_section == 'tickets' %}active{% endif %}">Tickets GLPI</a>
+        <a href="/accounts" class="nav-btn {% if active_section == 'accounts' %}active{% endif %}">Cuentas</a>
+        <a href="/settings" class="nav-btn {% if active_section == 'settings' %}active{% endif %}">Configuración</a>
+    </nav>
+
+    <div class="system-status">
+        <span class="version-text">{{ version.full }}</span>
+        <form method="post" action="/logout">
+            <button class="logout-button">Salir</button>
+        </form>
+    </div>
+</header>
+
+<main class="app-container">
+    <section class="thread-list-panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Cuenta activa</h2>
+        </div>
+
+        <div class="message-scroll-area">
+            <article class="message-item active">
+                <div class="message-meta">
+                    <span class="message-sender">{{ user.display_name }}</span>
+                    <span>{{ user.role }}</span>
+                </div>
+                <div class="message-subject">{{ user.account_email }}</div>
+                <div class="message-snippet">
+                    Sección activa: {{ section.title }}
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="reading-ai-panel">
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">{{ section.icon }}</div>
+            <h2 style="margin: 0 0 8px;">{{ section.title }}</h2>
+            <p class="pane-empty-text">{{ section.description }}</p>
+
+            <div class="info-grid">
+                {% for item in section.next_steps %}
+                <div class="info-card">
+                    <div class="info-label">Pendiente</div>
+                    <div class="info-value">{{ item }}</div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <pre class="code-box">Cuenta: {{ user.account_email }}
+Usuario interno: {{ user.user_id }}
+Cuenta interna: {{ user.account_id }}
+Sección: {{ section_key }}
+Versión: {{ version.full }}</pre>
+        </div>
+    </section>
+</main>
+{% endblock %}
