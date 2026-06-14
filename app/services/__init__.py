@@ -12,6 +12,7 @@ from app.services.glpi_service import GlpiService, glpi_service
 from app.services.mailbox_preview_service import (
     list_collaborative_imap_folders,
     preview_collaborative_mailbox,
+    preview_unified_collaborative_mailbox,
 )
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "list_collaborative_accounts",
     "list_collaborative_imap_folders",
     "preview_collaborative_mailbox",
+    "preview_unified_collaborative_mailbox",
     "test_imap_connection_readonly",
     "test_stored_collaborative_account_imap",
     "upsert_collaborative_account",

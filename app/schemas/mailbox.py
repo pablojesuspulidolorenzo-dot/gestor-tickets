@@ -20,6 +20,7 @@ class MailboxFoldersResponse(BaseModel):
 
 
 class MailboxPreviewMessage(BaseModel):
+    mailbox: str
     uid: str
     message_id: str | None
     subject: str
@@ -31,6 +32,7 @@ class MailboxPreviewMessage(BaseModel):
     seen: bool
     answered: bool
     has_references: bool
+    direction: str
 
 
 class MailboxPreviewResponse(BaseModel):
@@ -40,6 +42,18 @@ class MailboxPreviewResponse(BaseModel):
     mailbox: str
     readonly_mode: bool
     total_messages: int | None
+    returned_messages: int
+    messages: list[MailboxPreviewMessage]
+    safety_notes: list[str]
+
+
+class UnifiedMailboxPreviewResponse(BaseModel):
+    ok: bool
+    account_id: int
+    account_email: str
+    mailboxes: list[str]
+    readonly_mode: bool
+    total_messages_by_mailbox: dict[str, int | None]
     returned_messages: int
     messages: list[MailboxPreviewMessage]
     safety_notes: list[str]

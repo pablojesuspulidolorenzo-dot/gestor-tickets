@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.versioning import get_version_metadata
-from app.services.mailbox_preview_service import SAFETY_NOTES, preview_collaborative_mailbox
+from app.services.mailbox_preview_service import SAFETY_NOTES, preview_unified_collaborative_mailbox
 from app.services.session_auth_service import authenticate_session_user
 
 router = APIRouter()
@@ -173,11 +173,12 @@ def mailbox_page(
         return user
 
     try:
-        preview = preview_collaborative_mailbox(
+        preview = preview_unified_collaborative_mailbox(
             db,
             account_id=int(user["account_id"]),
-            mailbox="INBOX",
-            limit=20,
+            mailboxes=["INBOX", "INBOX.Sent"],
+            limit_per_mailbox=20,
+            total_limit=50,
         )
         error = None
     except ValueError as exc:

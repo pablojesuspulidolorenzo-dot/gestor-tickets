@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -7,15 +7,35 @@ from app.schemas.mailbox import (
     MailboxFoldersResponse,
     MailboxPreviewMessage,
     MailboxPreviewResponse,
+    UnifiedMailboxPreviewResponse,
 )
 from app.services.mailbox_preview_service import (
     FOLDER_SAFETY_NOTES,
     SAFETY_NOTES,
     list_collaborative_imap_folders,
     preview_collaborative_mailbox,
+    preview_unified_collaborative_mailbox,
 )
 
 router = APIRouter(tags=["mailbox"])
+
+
+def _message_schema(item) -> MailboxPreviewMessage:
+    return MailboxPreviewMessage(
+        mailbox=item.mailbox,
+        uid=item.uid,
+        message_id=item.message_id,
+        subject=item.subject,
+        from_=item.from_,
+        to=item.to,
+        cc=item.cc,
+        date=item.date,
+        flags=item.flags,
+        seen=item.seen,
+        answered=item.answered,
+        has_references=item.has_references,
+        direction=item.direction,
+    )
 
 
 @router.get("/folders", response_model=MailboxFoldersResponse)
@@ -72,22 +92,40 @@ def preview_mailbox(
             readonly_mode=True,
             total_messages=preview.total_messages,
             returned_messages=len(preview.messages),
-            messages=[
-                MailboxPreviewMessage(
-                    uid=item.uid,
-                    message_id=item.message_id,
-                    subject=item.subject,
-                    from_=item.from_,
-                    to=item.to,
-                    cc=item.cc,
-                    date=item.date,
-                    flags=item.flags,
-                    seen=item.seen,
-                    answered=item.answered,
-                    has_references=item.has_references,
-                )
-                for item in preview.messages
-            ],
+            messages=[_message_schema(item) for item in preview.messages],
+            safety_notes=SAFETY_NOTES,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/unified", response_model=UnifiedMailboxPreviewResponse)
+def preview_unified_mailbox(
+    account_id: int,
+    mailboxes: list[str] = Query(default=["INBOX", "INBOX.Sent"]),
+    limit_per_mailbox: int = 20,
+    total_limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    try:
+        preview = preview_unified_collaborative_mailbox(
+            db,
+            account_id=account_id,
+            mailboxes=mailboxes,
+            limit_per_mailbox=limit_per_mailbox,
+            total_limit=total_limit,
+        )
+
+        return UnifiedMailboxPreviewResponse(
+            ok=preview.ok,
+            account_id=preview.account.id,
+            account_email=preview.account.email,
+            mailboxes=preview.mailboxes,
+            readonly_mode=True,
+            total_messages_by_mailbox=preview.total_messages_by_mailbox,
+            returned_messages=len(preview.messages),
+            messages=[_message_schema(item) for item in preview.messages],
             safety_notes=SAFETY_NOTES,
         )
 

@@ -5,6 +5,7 @@ import imaplib
 import re
 from dataclasses import dataclass
 from email.header import decode_header, make_header
+from email.utils import parsedate_to_datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -53,6 +54,7 @@ class ImapFoldersResult:
 
 @dataclass(frozen=True)
 class PreviewMessage:
+    mailbox: str
     uid: str
     message_id: str | None
     subject: str
@@ -64,6 +66,7 @@ class PreviewMessage:
     seen: bool
     answered: bool
     has_references: bool
+    direction: str
 
 
 @dataclass(frozen=True)
@@ -72,6 +75,15 @@ class MailboxPreview:
     account: CollaborativeAccount
     mailbox: str
     total_messages: int | None
+    messages: list[PreviewMessage]
+
+
+@dataclass(frozen=True)
+class UnifiedMailboxPreview:
+    ok: bool
+    account: CollaborativeAccount
+    mailboxes: list[str]
+    total_messages_by_mailbox: dict[str, int | None]
     messages: list[PreviewMessage]
 
 
@@ -190,7 +202,6 @@ def _parse_list_line(raw_line) -> ImapFolder | None:
     if not line:
         return None
 
-    # Formato típico: (\HasNoChildren) "/" "INBOX"
     match = re.match(r'^\((?P<flags>.*?)\)\s+"?(?P<delimiter>[^"\s]*)"?\s+"?(?P<name>.*)"?$', line)
     if not match:
         return ImapFolder(
@@ -238,6 +249,27 @@ def _parse_list_line(raw_line) -> ImapFolder | None:
         is_inbox=lowered == "inbox",
         is_sent_candidate=is_sent_candidate,
     )
+
+
+def _message_sort_key(message: PreviewMessage):
+    if message.date:
+        try:
+            parsed = parsedate_to_datetime(message.date)
+            return parsed.timestamp()
+        except Exception:
+            pass
+
+    try:
+        return float(message.uid)
+    except Exception:
+        return 0.0
+
+
+def _direction_for_mailbox(mailbox: str) -> str:
+    lowered = mailbox.lower()
+    if "sent" in lowered or "enviad" in lowered:
+        return "sent"
+    return "received"
 
 
 def list_collaborative_imap_folders(
@@ -351,6 +383,7 @@ def preview_collaborative_mailbox(
 
             messages.append(
                 PreviewMessage(
+                    mailbox=mailbox,
                     uid=uid,
                     message_id=_clean_text(msg.get("Message-ID")) or None,
                     subject=_decode_header_value(msg.get("Subject")) or "(Sin asunto)",
@@ -362,6 +395,7 @@ def preview_collaborative_mailbox(
                     seen="\\Seen" in flags,
                     answered="\\Answered" in flags,
                     has_references=bool(references or in_reply_to),
+                    direction=_direction_for_mailbox(mailbox),
                 )
             )
 
@@ -390,3 +424,52 @@ def preview_collaborative_mailbox(
                 connection.logout()
             except Exception:
                 pass
+
+
+def preview_unified_collaborative_mailbox(
+    db: Session,
+    *,
+    account_id: int,
+    mailboxes: list[str] | None = None,
+    limit_per_mailbox: int = 20,
+    total_limit: int = 50,
+) -> UnifiedMailboxPreview:
+    mailboxes = mailboxes or ["INBOX", "INBOX.Sent"]
+    clean_mailboxes = []
+    for mailbox in mailboxes:
+        mailbox = _clean_text(mailbox)
+        if mailbox and mailbox not in clean_mailboxes:
+            clean_mailboxes.append(mailbox)
+
+    if not clean_mailboxes:
+        clean_mailboxes = ["INBOX"]
+
+    total_messages_by_mailbox: dict[str, int | None] = {}
+    all_messages: list[PreviewMessage] = []
+    account = None
+
+    for mailbox in clean_mailboxes:
+        preview = preview_collaborative_mailbox(
+            db,
+            account_id=account_id,
+            mailbox=mailbox,
+            limit=limit_per_mailbox,
+        )
+        account = preview.account
+        total_messages_by_mailbox[mailbox] = preview.total_messages
+        all_messages.extend(preview.messages)
+
+    all_messages = sorted(all_messages, key=_message_sort_key, reverse=True)
+    total_limit = max(1, min(int(total_limit), 100))
+    all_messages = all_messages[:total_limit]
+
+    if account is None:
+        account, _ = _get_account_and_password(db, account_id)
+
+    return UnifiedMailboxPreview(
+        ok=True,
+        account=account,
+        mailboxes=clean_mailboxes,
+        total_messages_by_mailbox=total_messages_by_mailbox,
+        messages=all_messages,
+    )

@@ -29,7 +29,7 @@
 <main class="app-container">
     <section class="thread-list-panel">
         <div class="panel-header">
-            <h2 class="panel-title">Bandeja {{ preview.mailbox }}</h2>
+            <h2 class="panel-title">Bandeja unificada</h2>
         </div>
 
         <div class="message-scroll-area">
@@ -37,7 +37,14 @@
                 {% for message in preview.messages %}
                 <article class="message-item">
                     <div class="message-meta">
-                        <span class="message-sender">{{ message.from_ }}</span>
+                        <span class="message-sender">
+                            {% if message.direction == "sent" %}
+                                Enviado
+                            {% else %}
+                                Recibido
+                            {% endif %}
+                            · {{ message.mailbox }}
+                        </span>
                         <span>UID {{ message.uid }}</span>
                     </div>
                     <div class="message-subject">{{ message.subject }}</div>
@@ -49,13 +56,21 @@
                             · no leído
                         {% endif %}
                     </div>
+                    <div class="message-snippet">
+                        De: {{ message.from_ }}
+                    </div>
+                    {% if message.to %}
+                    <div class="message-snippet">
+                        Para: {{ message.to }}
+                    </div>
+                    {% endif %}
                 </article>
                 {% endfor %}
             {% else %}
                 <article class="message-item active">
-                    <div class="message-subject">No hay mensajes en esta bandeja</div>
+                    <div class="message-subject">No hay mensajes en Entrada ni Enviados</div>
                     <div class="message-snippet">
-                        La conexión IMAP funciona, pero {{ preview.mailbox }} tiene 0 mensajes.
+                        La conexión IMAP funciona, pero no se han encontrado cabeceras en las carpetas configuradas.
                     </div>
                 </article>
             {% endif %}
@@ -65,10 +80,10 @@
     <section class="reading-ai-panel">
         <div class="pane-empty-state">
             <div class="pane-empty-icon">📥</div>
-            <h2 style="margin: 0 0 8px;">Preview IMAP seguro</h2>
+            <h2 style="margin: 0 0 8px;">Bandeja unificada segura</h2>
             <p class="pane-empty-text">
-                Esta vista lee solo cabeceras mediante IMAP en modo solo lectura. No descarga cuerpos,
-                no modifica flags y no marca correos como leídos.
+                Esta vista combina Entrada y Enviados leyendo solo cabeceras mediante IMAP en modo solo lectura.
+                No descarga cuerpos, no modifica flags y no marca correos como leídos.
             </p>
 
             <div class="info-grid">
@@ -77,11 +92,11 @@
                     <div class="info-value">{{ preview.account.email }}</div>
                 </div>
                 <div class="info-card">
-                    <div class="info-label">Total en buzón</div>
-                    <div class="info-value">{{ preview.total_messages }}</div>
+                    <div class="info-label">Carpetas</div>
+                    <div class="info-value">{{ preview.mailboxes|join(", ") }}</div>
                 </div>
                 <div class="info-card">
-                    <div class="info-label">Mostrados</div>
+                    <div class="info-label">Mensajes mostrados</div>
                     <div class="info-value">{{ preview.messages|length }}</div>
                 </div>
                 <div class="info-card">
@@ -90,7 +105,12 @@
                 </div>
             </div>
 
-            <pre class="code-box">{% for note in safety_notes %}- {{ note }}
+            <pre class="code-box">Totales por carpeta:
+{% for mailbox, total in preview.total_messages_by_mailbox.items() %}- {{ mailbox }}: {{ total }}
+{% endfor %}
+
+Garantías:
+{% for note in safety_notes %}- {{ note }}
 {% endfor %}</pre>
         </div>
     </section>
