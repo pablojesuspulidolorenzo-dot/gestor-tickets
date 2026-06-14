@@ -13,3 +13,5 @@ bleach
 beautifulsoup4
 aiofiles
 itsdangerous
+
+email-validator
