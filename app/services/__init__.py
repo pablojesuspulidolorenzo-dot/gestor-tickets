@@ -19,6 +19,12 @@ from app.services.glpi_ticket_service import (
     list_glpi_tickets_for_thread,
     refresh_glpi_ticket_cache,
 )
+from app.services.mail_ingestion_service import (
+    configure_mail_ingestion_job,
+    list_mail_ingestion_jobs,
+    run_due_mail_ingestion_jobs,
+    run_mail_ingestion_job,
+)
 from app.services.mailbox_preview_service import (
     list_collaborative_imap_folders,
     preview_collaborative_mailbox,
@@ -40,6 +46,10 @@ __all__ = [
     "create_audit_log",
     "create_glpi_ticket_from_thread",
     "create_thread_from_email",
+    "run_mail_ingestion_job",
+    "run_due_mail_ingestion_jobs",
+    "list_mail_ingestion_jobs",
+    "configure_mail_ingestion_job",
     "fetch_message_detail_readonly",
     "get_active_thread_for_email",
     "glpi_service",
