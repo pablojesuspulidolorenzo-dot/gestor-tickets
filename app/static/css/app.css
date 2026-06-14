@@ -513,3 +513,16 @@ a {
     font-weight: 700;
     margin-bottom: 8px;
 }
+
+.glpi-ticket-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    padding: 7px 10px;
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+    font-weight: 900;
+    font-size: 0.84rem;
+}

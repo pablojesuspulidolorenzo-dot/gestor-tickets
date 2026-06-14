@@ -10,6 +10,10 @@ from app.services.collaborative_imap_service import (
 )
 from app.services.email_archive_service import archive_message_from_imap_readonly
 from app.services.glpi_service import GlpiService, glpi_service
+from app.services.glpi_ticket_service import (
+    create_glpi_ticket_from_thread,
+    list_glpi_tickets_for_thread,
+)
 from app.services.mailbox_preview_service import (
     list_collaborative_imap_folders,
     preview_collaborative_mailbox,
@@ -27,6 +31,7 @@ __all__ = [
     "archive_message_from_imap_readonly",
     "configure_collaborative_account_imap",
     "create_audit_log",
+    "create_glpi_ticket_from_thread",
     "create_thread_from_email",
     "fetch_message_detail_readonly",
     "get_active_thread_for_email",
@@ -34,6 +39,7 @@ __all__ = [
     "list_collaborative_accounts",
     "list_collaborative_imap_folders",
     "list_system_threads",
+    "list_glpi_tickets_for_thread",
     "preview_collaborative_mailbox",
     "preview_unified_collaborative_mailbox",
     "test_imap_connection_readonly",

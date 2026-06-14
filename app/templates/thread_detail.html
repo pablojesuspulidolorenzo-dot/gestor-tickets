@@ -45,6 +45,21 @@
                 <div class="message-snippet">Normalizado: {{ thread.subject_normalized or "No disponible" }}</div>
             </article>
 
+            {% if glpi_tickets %}
+                {% for ticket in glpi_tickets %}
+                <article class="message-item archive-state archived">
+                    <div class="message-subject">Ticket GLPI #{{ ticket.glpi_ticket_id }}</div>
+                    <div class="message-snippet">{{ ticket.title or "Sin título" }}</div>
+                    <div class="message-snippet">Estado: {{ ticket.status or "No disponible" }}</div>
+                </article>
+                {% endfor %}
+            {% else %}
+            <article class="message-item archive-state pending">
+                <div class="message-subject">Sin ticket GLPI relacionado</div>
+                <div class="message-snippet">Puedes crear un ticket desde este hilo.</div>
+            </article>
+            {% endif %}
+
             {% for message in messages %}
             <article class="message-item">
                 <div class="message-meta">
@@ -74,9 +89,34 @@
             <div class="pane-empty-icon">🧵</div>
             <h2 style="margin: 0 0 8px;">{{ thread.title or "Hilo operativo" }}</h2>
             <p class="pane-empty-text">
-                Este es el detalle interno del hilo. Aquí se irán agrupando los correos archivados y,
-                en la siguiente fase, se podrá relacionar el hilo con GLPI.
+                Detalle interno del hilo operativo y relación con GLPI.
             </p>
+
+            {% if glpi_tickets %}
+            <div class="scheduled-alert scheduled-alert-success" style="margin: 18px 0;">
+                Este hilo ya está relacionado con ticket GLPI #{{ glpi_tickets[0].glpi_ticket_id }}.
+            </div>
+            {% else %}
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Crear ticket GLPI desde este hilo</h3>
+                <p class="pane-empty-text">
+                    La contraseña GLPI se usará solo para esta operación y no se guardará.
+                </p>
+                <form method="post" action="/threads/{{ thread.id }}/glpi/create-ticket" class="form-stack">
+                    <label class="form-label">
+                        Título del ticket
+                        <input class="form-input" type="text" name="title" value="{{ thread.title or '' }}">
+                    </label>
+                    <label class="form-label">
+                        Contraseña GLPI
+                        <input class="form-input" type="password" name="glpi_password" autocomplete="current-password" required>
+                    </label>
+                    <button class="primary-button" type="submit">
+                        Crear ticket GLPI
+                    </button>
+                </form>
+            </section>
+            {% endif %}
 
             <div class="info-grid">
                 <div class="info-card">
@@ -92,8 +132,8 @@
                     <div class="info-value">{{ thread.last_message_at or "No disponible" }}</div>
                 </div>
                 <div class="info-card">
-                    <div class="info-label">Estado GLPI</div>
-                    <div class="info-value">Pendiente de relacionar</div>
+                    <div class="info-label">Tickets GLPI</div>
+                    <div class="info-value">{{ glpi_tickets|length }}</div>
                 </div>
             </div>
 

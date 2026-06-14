@@ -12,6 +12,10 @@ from app.services.email_archive_service import (
 )
 from app.services.mailbox_preview_service import SAFETY_NOTES, preview_unified_collaborative_mailbox
 from app.services.message_detail_service import MESSAGE_DETAIL_SAFETY_NOTES, fetch_message_detail_readonly
+from app.services.glpi_ticket_service import (
+    create_glpi_ticket_from_thread,
+    list_glpi_tickets_for_thread,
+)
 from app.services.session_auth_service import authenticate_session_user
 from app.services.thread_service import (
     create_thread_from_email,
@@ -396,6 +400,11 @@ def thread_detail_page(
             account_id=int(user["account_id"]),
             thread_id=thread_id,
         )
+        glpi_tickets = list_glpi_tickets_for_thread(
+            db,
+            account_id=int(user["account_id"]),
+            thread_id=thread_id,
+        )
     except ValueError:
         return RedirectResponse(url="/threads", status_code=303)
 
@@ -408,8 +417,37 @@ def thread_detail_page(
             active_section="threads",
             thread=thread,
             messages=messages,
+            glpi_tickets=glpi_tickets,
         ),
     )
+
+
+
+@router.post("/threads/{thread_id}/glpi/create-ticket", response_class=HTMLResponse)
+def thread_create_glpi_ticket_web(
+    request: Request,
+    thread_id: int,
+    glpi_password: str = Form(...),
+    title: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        create_glpi_ticket_from_thread(
+            db,
+            account_id=int(user["account_id"]),
+            thread_id=thread_id,
+            user_id=int(user["user_id"]),
+            glpi_password=glpi_password,
+            title_override=title,
+        )
+    except ValueError:
+        return RedirectResponse(url=f"/threads/{thread_id}", status_code=303)
+
+    return RedirectResponse(url=f"/threads/{thread_id}", status_code=303)
 
 
 @router.get("/{section}", response_class=HTMLResponse)
