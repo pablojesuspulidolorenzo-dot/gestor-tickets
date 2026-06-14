@@ -1105,3 +1105,350 @@ def add_glpi_followup_to_ticket(
     finally:
         if session_token:
             _kill_session(session_token)
+
+
+from pathlib import Path
+
+
+def _existing_eml_attachment_operation(
+    db: Session,
+    *,
+    ticket_cache_id: int,
+    email_message_id: int,
+) -> dict | None:
+    row = db.execute(
+        text("""
+            SELECT
+                response_json,
+                request_payload_json
+            FROM gestor_tickets.glpi_api_operations
+            WHERE glpi_ticket_cache_id = :ticket_cache_id
+              AND operation_type = 'attach_email_eml'
+              AND success = true
+              AND request_payload_json->>'email_message_id' = :email_message_id
+            ORDER BY id DESC
+            LIMIT 1
+        """),
+        {
+            "ticket_cache_id": ticket_cache_id,
+            "email_message_id": str(email_message_id),
+        },
+    ).mappings().first()
+
+    if not row:
+        return None
+
+    response_json = row["response_json"] or {}
+    request_payload = row["request_payload_json"] or {}
+
+    return {
+        "glpi_document_id": response_json.get("glpi_document_id"),
+        "glpi_document_item_id": response_json.get("glpi_document_item_id"),
+        "filename": request_payload.get("filename") or "correo_original.eml",
+    }
+
+
+def _get_email_for_attachment(
+    db: Session,
+    *,
+    account_id: int,
+    email_message_id: int,
+) -> dict:
+    row = db.execute(
+        text("""
+            SELECT
+                id,
+                account_id,
+                subject,
+                message_id_header,
+                eml_storage_path,
+                eml_sha256,
+                size_bytes
+            FROM gestor_tickets.email_messages
+            WHERE id = :email_message_id
+              AND account_id = :account_id
+            LIMIT 1
+        """),
+        {
+            "account_id": account_id,
+            "email_message_id": email_message_id,
+        },
+    ).mappings().first()
+
+    if not row:
+        raise ValueError("El correo archivado no existe para esta cuenta.")
+
+    email_row = dict(row)
+    eml_path = Path(email_row["eml_storage_path"])
+
+    if not eml_path.exists() or not eml_path.is_file():
+        raise ValueError(f"No existe el fichero .eml archivado: {eml_path}")
+
+    return email_row
+
+
+def _safe_attachment_filename(*, ticket_id: int, email_message_id: int, subject: str | None) -> str:
+    base = _clean_text(subject) or f"correo_{email_message_id}"
+    cleaned = "".join(ch if ch.isalnum() or ch in "._- " else "_" for ch in base)
+    cleaned = "_".join(cleaned.split())
+    cleaned = cleaned[:90].strip("._-") or f"correo_{email_message_id}"
+    return f"ticket_{ticket_id}_email_{email_message_id}_{cleaned}.eml"
+
+
+def _multipart_headers(session_token: str) -> dict[str, str]:
+    headers = {
+        "Accept": "application/json",
+        "Session-Token": session_token,
+    }
+
+    if settings.GLPI_APP_TOKEN:
+        headers["App-Token"] = settings.GLPI_APP_TOKEN
+
+    return headers
+
+
+def _upload_document_to_glpi(
+    *,
+    session_token: str,
+    eml_path: Path,
+    filename: str,
+    name: str,
+) -> tuple[int, dict, int]:
+    manifest = {
+        "input": {
+            "name": name,
+            "_filename": [filename],
+        }
+    }
+
+    with eml_path.open("rb") as fh:
+        files = {
+            "uploadManifest": (
+                None,
+                json.dumps(manifest),
+                "application/json",
+            ),
+            "filename[0]": (
+                filename,
+                fh,
+                "message/rfc822",
+            ),
+        }
+
+        with httpx.Client(timeout=settings.GLPI_TIMEOUT_SECONDS) as client:
+            response = client.post(
+                _api_url("Document"),
+                headers=_multipart_headers(session_token),
+                params=_params(),
+                files=files,
+            )
+
+    if response.status_code not in {200, 201}:
+        raise ValueError(
+            f"No se pudo subir el documento .eml a GLPI "
+            f"(HTTP {response.status_code}): {response.text[:1500]}"
+        )
+
+    data = response.json()
+    document_id = None
+
+    if isinstance(data, dict):
+        document_id = data.get("id") or data.get("item", {}).get("id")
+
+    if not document_id:
+        raise ValueError(f"GLPI no devolvió id del documento: {data}")
+
+    return int(document_id), data, response.status_code
+
+
+def _link_document_to_ticket(
+    *,
+    session_token: str,
+    document_id: int,
+    ticket_id: int,
+) -> tuple[int | None, dict, int]:
+    payload = {
+        "input": {
+            "documents_id": document_id,
+            "itemtype": "Ticket",
+            "items_id": ticket_id,
+        }
+    }
+
+    with httpx.Client(timeout=settings.GLPI_TIMEOUT_SECONDS) as client:
+        response = client.post(
+            _api_url("Document_Item"),
+            headers=_headers(session_token),
+            params=_params(),
+            json=payload,
+        )
+
+    if response.status_code not in {200, 201}:
+        raise ValueError(
+            f"No se pudo vincular el documento al ticket GLPI "
+            f"(HTTP {response.status_code}): {response.text[:1500]}"
+        )
+
+    data = response.json()
+    document_item_id = None
+
+    if isinstance(data, dict):
+        document_item_id = data.get("id") or data.get("item", {}).get("id")
+
+    try:
+        document_item_id = int(document_item_id) if document_item_id is not None else None
+    except (TypeError, ValueError):
+        document_item_id = None
+
+    return document_item_id, data, response.status_code
+
+
+def attach_email_eml_to_glpi_ticket(
+    db: Session,
+    *,
+    account_id: int,
+    ticket_cache_id: int,
+    email_message_id: int,
+    user_id: int | None,
+    glpi_password: str,
+) -> dict:
+    ticket = db.execute(
+        text("""
+            SELECT
+                id,
+                account_id,
+                glpi_instance_id,
+                glpi_ticket_id,
+                title
+            FROM gestor_tickets.glpi_ticket_cache
+            WHERE id = :ticket_cache_id
+              AND account_id = :account_id
+            LIMIT 1
+        """),
+        {
+            "account_id": account_id,
+            "ticket_cache_id": ticket_cache_id,
+        },
+    ).mappings().first()
+
+    if not ticket:
+        raise ValueError("El ticket GLPI cacheado no existe para esta cuenta.")
+
+    existing = _existing_eml_attachment_operation(
+        db,
+        ticket_cache_id=ticket_cache_id,
+        email_message_id=email_message_id,
+    )
+    if existing:
+        return {
+            "created": False,
+            "ticket_cache_id": ticket_cache_id,
+            "glpi_ticket_id": int(ticket["glpi_ticket_id"]),
+            "email_message_id": email_message_id,
+            "glpi_document_id": existing.get("glpi_document_id"),
+            "glpi_document_item_id": existing.get("glpi_document_item_id"),
+            "filename": existing.get("filename") or "correo_original.eml",
+        }
+
+    email_row = _get_email_for_attachment(
+        db,
+        account_id=account_id,
+        email_message_id=email_message_id,
+    )
+
+    account = _get_account(db, account_id=account_id)
+    glpi_instance_id = int(ticket["glpi_instance_id"])
+    glpi_ticket_id = int(ticket["glpi_ticket_id"])
+    eml_path = Path(email_row["eml_storage_path"])
+    filename = _safe_attachment_filename(
+        ticket_id=glpi_ticket_id,
+        email_message_id=email_message_id,
+        subject=email_row.get("subject"),
+    )
+    document_name = f"Correo original email_messages.id={email_message_id}"
+
+    session_token: str | None = None
+
+    request_payload = {
+        "ticket_cache_id": ticket_cache_id,
+        "glpi_ticket_id": glpi_ticket_id,
+        "email_message_id": email_message_id,
+        "filename": filename,
+        "eml_sha256": email_row.get("eml_sha256"),
+        "size_bytes": email_row.get("size_bytes"),
+    }
+
+    try:
+        session_token = _init_session(account["glpi_login"], glpi_password)
+
+        document_id, upload_response, upload_status_code = _upload_document_to_glpi(
+            session_token=session_token,
+            eml_path=eml_path,
+            filename=filename,
+            name=document_name,
+        )
+
+        document_item_id, link_response, link_status_code = _link_document_to_ticket(
+            session_token=session_token,
+            document_id=document_id,
+            ticket_id=glpi_ticket_id,
+        )
+
+        response_json = {
+            "glpi_document_id": document_id,
+            "glpi_document_item_id": document_item_id,
+            "upload_response": upload_response,
+            "link_response": link_response,
+        }
+
+        _log_glpi_operation(
+            db,
+            account_id=account_id,
+            glpi_instance_id=glpi_instance_id,
+            glpi_ticket_cache_id=ticket_cache_id,
+            operation_type="attach_email_eml",
+            requested_by_user_id=user_id,
+            request_payload=request_payload,
+            response_status_code=link_status_code or upload_status_code,
+            response_json=response_json,
+            success=True,
+        )
+
+        db.commit()
+
+        return {
+            "created": True,
+            "ticket_cache_id": ticket_cache_id,
+            "glpi_ticket_id": glpi_ticket_id,
+            "email_message_id": email_message_id,
+            "glpi_document_id": document_id,
+            "glpi_document_item_id": document_item_id,
+            "filename": filename,
+        }
+
+    except Exception as exc:
+        db.rollback()
+
+        try:
+            _log_glpi_operation(
+                db,
+                account_id=account_id,
+                glpi_instance_id=glpi_instance_id,
+                glpi_ticket_cache_id=ticket_cache_id,
+                operation_type="attach_email_eml",
+                requested_by_user_id=user_id,
+                request_payload=request_payload,
+                response_status_code=None,
+                response_json={},
+                success=False,
+                error_message=str(exc),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        raise
+
+    finally:
+        if session_token:
+            _kill_session(session_token)

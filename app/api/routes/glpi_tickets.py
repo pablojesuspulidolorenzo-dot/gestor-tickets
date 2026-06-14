@@ -5,6 +5,8 @@ from app.core.db import get_db
 from app.schemas.glpi_tickets import (
     AddGlpiTicketFollowupRequest,
     AddGlpiTicketFollowupResponse,
+    AttachEmailEmlRequest,
+    AttachEmailEmlResponse,
     CreateGlpiTicketFromThreadRequest,
     CreateGlpiTicketFromThreadResponse,
     GlpiTicketCacheSummary,
@@ -18,6 +20,7 @@ from app.schemas.glpi_tickets import (
 )
 from app.services.glpi_ticket_service import (
     add_glpi_followup_to_ticket,
+    attach_email_eml_to_glpi_ticket,
     create_glpi_ticket_from_thread,
     get_glpi_ticket_detail,
     list_glpi_ticket_cache,
@@ -168,6 +171,45 @@ def add_followup(
             glpi_ticket_id=result["glpi_ticket_id"],
             glpi_followup_id=result["glpi_followup_id"],
             message="Seguimiento GLPI añadido correctamente.",
+        )
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/cache/{ticket_cache_id}/attach-email/{email_message_id}", response_model=AttachEmailEmlResponse)
+def attach_email(
+    ticket_cache_id: int,
+    email_message_id: int,
+    payload: AttachEmailEmlRequest,
+    account_id: int,
+    user_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    try:
+        result = attach_email_eml_to_glpi_ticket(
+            db,
+            account_id=account_id,
+            ticket_cache_id=ticket_cache_id,
+            email_message_id=email_message_id,
+            user_id=user_id,
+            glpi_password=payload.glpi_password.get_secret_value(),
+        )
+
+        return AttachEmailEmlResponse(
+            ok=True,
+            created=result["created"],
+            ticket_cache_id=result["ticket_cache_id"],
+            glpi_ticket_id=result["glpi_ticket_id"],
+            email_message_id=result["email_message_id"],
+            glpi_document_id=result["glpi_document_id"],
+            glpi_document_item_id=result["glpi_document_item_id"],
+            filename=result["filename"],
+            message=(
+                "Correo .eml adjuntado correctamente al ticket GLPI."
+                if result["created"]
+                else "El correo .eml ya constaba adjuntado previamente."
+            ),
         )
 
     except ValueError as exc:

@@ -138,6 +138,15 @@
                     <p class="pane-empty-text">
                         email_messages.id={{ email.email_message_id }} · origen: {{ email.origin or "No disponible" }}
                     </p>
+                    <form method="post" action="/tickets/{{ ticket.id }}/attach-email/{{ email.email_message_id }}" class="form-stack" style="margin-top: 12px;">
+                        <label class="form-label">
+                            Contraseña GLPI
+                            <input class="form-input" type="password" name="glpi_password" autocomplete="current-password" required>
+                        </label>
+                        <button class="primary-button" type="submit">
+                            Adjuntar .eml original al ticket
+                        </button>
+                    </form>
                 </div>
                 {% endfor %}
             </section>

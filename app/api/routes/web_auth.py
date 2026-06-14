@@ -14,6 +14,7 @@ from app.services.mailbox_preview_service import SAFETY_NOTES, preview_unified_c
 from app.services.message_detail_service import MESSAGE_DETAIL_SAFETY_NOTES, fetch_message_detail_readonly
 from app.services.glpi_ticket_service import (
     add_glpi_followup_to_ticket,
+    attach_email_eml_to_glpi_ticket,
     create_glpi_ticket_from_thread,
     get_glpi_ticket_detail,
     list_glpi_ticket_cache,
@@ -563,6 +564,34 @@ def ticket_followup_web(
             glpi_password=glpi_password,
             content=content,
             is_private=bool(is_private),
+        )
+    except ValueError:
+        return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)
+
+    return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)
+
+
+
+@router.post("/tickets/{ticket_cache_id}/attach-email/{email_message_id}", response_class=HTMLResponse)
+def ticket_attach_email_web(
+    request: Request,
+    ticket_cache_id: int,
+    email_message_id: int,
+    glpi_password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        attach_email_eml_to_glpi_ticket(
+            db,
+            account_id=int(user["account_id"]),
+            ticket_cache_id=ticket_cache_id,
+            email_message_id=email_message_id,
+            user_id=int(user["user_id"]),
+            glpi_password=glpi_password,
         )
     except ValueError:
         return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)

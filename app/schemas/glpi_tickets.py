@@ -18,6 +18,10 @@ class AddGlpiTicketFollowupRequest(BaseModel):
     is_private: bool = False
 
 
+class AttachEmailEmlRequest(BaseModel):
+    glpi_password: SecretStr
+
+
 class GlpiTicketCacheSummary(BaseModel):
     id: int
     glpi_ticket_id: int
@@ -88,4 +92,16 @@ class AddGlpiTicketFollowupResponse(BaseModel):
     ticket_cache_id: int
     glpi_ticket_id: int
     glpi_followup_id: int | None
+    message: str
+
+
+class AttachEmailEmlResponse(BaseModel):
+    ok: bool
+    created: bool
+    ticket_cache_id: int
+    glpi_ticket_id: int
+    email_message_id: int
+    glpi_document_id: int | None
+    glpi_document_item_id: int | None
+    filename: str
     message: str
