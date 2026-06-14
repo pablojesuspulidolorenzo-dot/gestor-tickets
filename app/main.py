@@ -19,7 +19,7 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SESSION_SECRET_KEY,
     same_site="lax",
-    https_only=False,
+    https_only=settings.SESSION_COOKIE_HTTPS_ONLY or settings.APP_ENV.lower() == "production",
 )
 
 app.mount("/static", StaticFiles(directory="/app/static"), name="static")

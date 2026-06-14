@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import traceback
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
 
+from app.core.config import settings
 from app.core.db import SessionLocal
 from app.services.mail_ingestion_service import run_due_mail_ingestion_jobs
 
@@ -30,26 +29,19 @@ _state: dict[str, Any] = {
 }
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.getenv(name)
-    if value is None or value == "":
-        return default
-
-    return value.strip().lower() in {"1", "true", "yes", "on", "si", "sí"}
-
-
 def _interval_seconds() -> int:
-    raw = os.getenv("MAIL_INGESTION_SCHEDULER_INTERVAL_SECONDS", "10")
-    try:
-        value = int(raw)
-    except ValueError:
-        return 10
-
-    return max(5, min(value, 3600))
+    return max(5, min(int(settings.MAIL_INGESTION_SCHEDULER_INTERVAL_SECONDS), 3600))
 
 
 def _scheduler_enabled() -> bool:
-    return _env_bool("MAIL_INGESTION_SCHEDULER_ENABLED", True)
+    return bool(settings.MAIL_INGESTION_SCHEDULER_ENABLED)
+
+
+def _safe_error_message(exc: Exception) -> str:
+    message = str(exc).replace("\n", " ").strip()
+    if len(message) > 300:
+        message = message[:297] + "..."
+    return f"{type(exc).__name__}: {message}"
 
 
 def get_mail_ingestion_scheduler_state() -> dict[str, Any]:
@@ -139,9 +131,12 @@ async def _scheduler_loop() -> None:
 
         except Exception as exc:
             _state["last_error_at"] = datetime.now().isoformat(timespec="seconds")
-            _state["last_error_message"] = f"{type(exc).__name__}: {exc}"
+            _state["last_error_message"] = _safe_error_message(exc)
             print("[mail-ingestion-scheduler] ERROR:", _state["last_error_message"], flush=True)
-            traceback.print_exc()
+            if settings.APP_ENV.lower() == "development":
+                import traceback
+
+                traceback.print_exc()
 
         finally:
             _state["running"] = False

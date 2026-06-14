@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     # Archivo de correos .eml
     MAIL_ARCHIVE_ROOT: str = "/data/mail_archive"
 
+    # Scheduler de ingesta
+    MAIL_INGESTION_SCHEDULER_ENABLED: bool = True
+    MAIL_INGESTION_SCHEDULER_INTERVAL_SECONDS: int = 10
+
+    # Endurecimiento HTTP
+    SESSION_COOKIE_HTTPS_ONLY: bool = False
+
     # IA / LLM
     LLM_BASE_URL: str | None = None
     LLM_API_KEY: str | None = None
