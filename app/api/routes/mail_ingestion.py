@@ -10,6 +10,7 @@ from app.schemas.mail_ingestion import (
     MailIngestionRunResponse,
     MailIngestionRunSummary,
 )
+from app.services.mail_ingestion_scheduler import get_mail_ingestion_scheduler_state
 from app.services.mail_ingestion_service import (
     configure_mail_ingestion_job,
     list_mail_ingestion_jobs,
@@ -104,4 +105,12 @@ def run_due_jobs(
             }
             for job, run in results
         ],
+    }
+
+
+@router.get("/scheduler/status")
+def scheduler_status():
+    return {
+        "ok": True,
+        "scheduler": get_mail_ingestion_scheduler_state(),
     }

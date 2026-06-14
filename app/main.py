@@ -1,3 +1,4 @@
+from app.services.mail_ingestion_scheduler import start_mail_ingestion_scheduler, stop_mail_ingestion_scheduler
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -65,3 +66,13 @@ def htmx_ping():
         "HTMX funciona correctamente ✅"
         "</div>"
     )
+
+
+@app.on_event("startup")
+async def _start_mail_ingestion_scheduler() -> None:
+    start_mail_ingestion_scheduler()
+
+
+@app.on_event("shutdown")
+async def _stop_mail_ingestion_scheduler() -> None:
+    await stop_mail_ingestion_scheduler()

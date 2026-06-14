@@ -19,6 +19,11 @@ from app.services.glpi_ticket_service import (
     list_glpi_tickets_for_thread,
     refresh_glpi_ticket_cache,
 )
+from app.services.mail_ingestion_scheduler import (
+    get_mail_ingestion_scheduler_state,
+    start_mail_ingestion_scheduler,
+    stop_mail_ingestion_scheduler,
+)
 from app.services.mail_ingestion_service import (
     configure_mail_ingestion_job,
     list_mail_ingestion_jobs,
@@ -47,6 +52,9 @@ __all__ = [
     "create_glpi_ticket_from_thread",
     "create_thread_from_email",
     "run_mail_ingestion_job",
+    "stop_mail_ingestion_scheduler",
+    "start_mail_ingestion_scheduler",
+    "get_mail_ingestion_scheduler_state",
     "run_due_mail_ingestion_jobs",
     "list_mail_ingestion_jobs",
     "configure_mail_ingestion_job",
