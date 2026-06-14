@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}Ingesta IMAP - Gestor Tickets{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
+
+    <nav class="top-nav">
+        <a href="/app" class="nav-btn">Panel</a>
+        <a href="/mailbox" class="nav-btn">Bandeja</a>
+        <a href="/threads" class="nav-btn">Hilos</a>
+        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
+        <a href="/ingestion" class="nav-btn active">Ingesta</a>
+        <a href="/accounts" class="nav-btn">Cuentas</a>
+        <a href="/settings" class="nav-btn">Configuración</a>
+    </nav>
+
+    <div class="system-status">
+        <span class="version-text">{{ version.full }}</span>
+        <form method="post" action="/logout">
+            <button class="logout-button">Salir</button>
+        </form>
+    </div>
+</header>
+
+<main class="app-container">
+    <section class="thread-list-panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Ingesta IMAP</h2>
+        </div>
+
+        <div class="message-scroll-area">
+            <article class="message-item active">
+                <div class="message-meta">
+                    <span class="message-sender">Scheduler</span>
+                    <span>{% if scheduler.enabled %}Activo{% else %}Desactivado{% endif %}</span>
+                </div>
+                <div class="message-subject">
+                    Cada {{ scheduler.interval_seconds }} segundos
+                </div>
+                <div class="message-snippet">
+                    Lock PostgreSQL #{{ scheduler.advisory_lock_id }}
+                </div>
+            </article>
+
+            {% if job %}
+            <article class="message-item">
+                <div class="message-meta">
+                    <span class="message-sender">Job #{{ job.id }}</span>
+                    <span>{{ job.status }}</span>
+                </div>
+                <div class="message-subject">
+                    {{ job.inbox_folder_name }} / {{ job.sent_folder_name }}
+                </div>
+                <div class="message-snippet">
+                    Intervalo {{ job.interval_minutes }} min · máximo {{ job.max_messages_per_folder }} por carpeta
+                </div>
+            </article>
+            {% else %}
+            <article class="message-item">
+                <div class="message-subject">No hay job configurado</div>
+                <div class="message-snippet">Configura la ingesta para esta cuenta.</div>
+            </article>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="reading-ai-panel">
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">📥</div>
+            <h2 style="margin: 0 0 8px;">Ingesta programada IMAP</h2>
+            <p class="pane-empty-text">
+                La ingesta usa EXAMINE/readonly=True y BODY.PEEK. No ejecuta STORE ni modifica FLAGS.
+            </p>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">Scheduler</div>
+                    <div class="info-value">
+                        {% if scheduler.task_running %}Ejecutándose{% else %}Parado{% endif %}
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Ciclo actual</div>
+                    <div class="info-value">
+                        {% if scheduler.running %}En curso{% else %}Reposo{% endif %}
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Último éxito</div>
+                    <div class="info-value">{{ scheduler.last_success_at or "No disponible" }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Jobs ejecutados último ciclo</div>
+                    <div class="info-value">{{ scheduler.last_due_jobs_executed }}</div>
+                </div>
+            </div>
+
+            {% if scheduler.last_error_message %}
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Último error del scheduler</h3>
+                <p class="pane-empty-text">{{ scheduler.last_error_message }}</p>
+            </section>
+            {% endif %}
+
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Configuración del job</h3>
+
+                <form method="post" action="/ingestion/configure" class="form-stack">
+                    <label class="form-label">
+                        Estado
+                        <select class="form-input" name="status">
+                            <option value="active" {% if job and job.status == "active" %}selected{% endif %}>active</option>
+                            <option value="disabled" {% if job and job.status == "disabled" %}selected{% endif %}>disabled</option>
+                        </select>
+                    </label>
+
+                    <label class="form-label checkbox-label">
+                        <input type="checkbox" name="scan_inbox" value="1" {% if not job or job.scan_inbox %}checked{% endif %}>
+                        Escanear Entrada
+                    </label>
+
+                    <label class="form-label checkbox-label">
+                        <input type="checkbox" name="scan_sent" value="1" {% if not job or job.scan_sent %}checked{% endif %}>
+                        Escanear Enviados
+                    </label>
+
+                    <label class="form-label">
+                        Carpeta Entrada
+                        <input class="form-input" type="text" name="inbox_folder_name" value="{{ job.inbox_folder_name if job else 'INBOX' }}" required>
+                    </label>
+
+                    <label class="form-label">
+                        Carpeta Enviados
+                        <input class="form-input" type="text" name="sent_folder_name" value="{{ job.sent_folder_name if job else 'INBOX.Sent' }}" required>
+                    </label>
+
+                    <label class="form-label">
+                        Intervalo en minutos
+                        <input class="form-input" type="number" name="interval_minutes" min="1" max="1440" value="{{ job.interval_minutes if job else 5 }}" required>
+                    </label>
+
+                    <label class="form-label">
+                        Máximo de mensajes por carpeta
+                        <input class="form-input" type="number" name="max_messages_per_folder" min="1" value="{{ job.max_messages_per_folder if job else 50 }}" required>
+                    </label>
+
+                    <button class="primary-button" type="submit">Guardar configuración</button>
+                </form>
+            </section>
+
+            {% if job %}
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Ejecución manual</h3>
+                <p class="pane-empty-text">
+                    Lanza una revisión inmediata sin esperar al próximo ciclo del scheduler.
+                </p>
+                <form method="post" action="/ingestion/run-now">
+                    <button class="primary-button" type="submit">Ejecutar ingesta ahora</button>
+                </form>
+            </section>
+
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Estado del job</h3>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <div class="info-label">Último inicio</div>
+                        <div class="info-value">{{ job.last_started_at or "No disponible" }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Último éxito</div>
+                        <div class="info-value">{{ job.last_success_at or "No disponible" }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Próxima ejecución</div>
+                        <div class="info-value">{{ job.next_run_at or "No disponible" }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Fallos autenticación</div>
+                        <div class="info-value">{{ job.auth_failure_count }}</div>
+                    </div>
+                </div>
+
+                {% if job.last_error_message %}
+                <p class="pane-empty-text">{{ job.last_error_message }}</p>
+                {% endif %}
+            </section>
+            {% endif %}
+
+            {% if runs %}
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Últimas ejecuciones</h3>
+                {% for run in runs %}
+                <div class="timeline-item">
+                    <div class="timeline-title">
+                        Run #{{ run.id }} · {{ run.status }}
+                    </div>
+                    <div class="timeline-meta">
+                        {{ run.started_at }} → {{ run.finished_at or "en curso" }}
+                    </div>
+                    <p class="pane-empty-text">
+                        Entrada: {{ run.scanned_inbox_count }} · Enviados: {{ run.scanned_sent_count }} ·
+                        Importados: {{ run.imported_count }} · Duplicados: {{ run.duplicate_count }} · Errores: {{ run.error_count }}
+                    </p>
+                    {% if run.error_message %}
+                    <p class="pane-empty-text">{{ run.error_message }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+        </div>
+    </section>
+</main>
+{% endblock %}

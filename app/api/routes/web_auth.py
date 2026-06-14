@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.db import get_db
@@ -22,6 +23,12 @@ from app.services.glpi_ticket_service import (
     refresh_glpi_ticket_cache,
 )
 from app.services.session_auth_service import authenticate_session_user
+from app.services.mail_ingestion_scheduler import get_mail_ingestion_scheduler_state
+from app.services.mail_ingestion_service import (
+    configure_mail_ingestion_job,
+    list_mail_ingestion_jobs,
+    run_mail_ingestion_job,
+)
 from app.services.thread_service import (
     create_thread_from_email,
     get_active_thread_for_email,
@@ -598,6 +605,118 @@ def ticket_attach_email_web(
         return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)
 
     return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)
+
+
+
+
+def _get_ingestion_runs_for_account(db: Session, *, account_id: int) -> list[dict]:
+    rows = db.execute(
+        text("""
+            SELECT
+                id,
+                job_id,
+                account_id,
+                status::text AS status,
+                started_at,
+                finished_at,
+                scanned_inbox_count,
+                scanned_sent_count,
+                imported_count,
+                duplicate_count,
+                error_count,
+                error_message,
+                details_json
+            FROM gestor_tickets.mail_ingestion_runs
+            WHERE account_id = :account_id
+            ORDER BY id DESC
+            LIMIT 20
+        """),
+        {"account_id": account_id},
+    ).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
+@router.get("/ingestion", response_class=HTMLResponse)
+def ingestion_page(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    account_id = int(user["account_id"])
+    jobs = list_mail_ingestion_jobs(db, account_id=account_id)
+    job = jobs[0] if jobs else None
+    runs = _get_ingestion_runs_for_account(db, account_id=account_id)
+    scheduler = get_mail_ingestion_scheduler_state()
+
+    return templates.TemplateResponse(
+        request,
+        "ingestion.html",
+        {
+            "user": user,
+            "version": get_version_metadata(),
+            "scheduler": scheduler,
+            "job": job,
+            "runs": runs,
+        },
+    )
+
+
+@router.post("/ingestion/configure", response_class=HTMLResponse)
+def ingestion_configure_web(
+    request: Request,
+    status: str = Form("active"),
+    scan_inbox: str | None = Form(None),
+    scan_sent: str | None = Form(None),
+    inbox_folder_name: str = Form("INBOX"),
+    sent_folder_name: str = Form("INBOX.Sent"),
+    interval_minutes: int = Form(5),
+    max_messages_per_folder: int = Form(50),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    configure_mail_ingestion_job(
+        db,
+        account_id=int(user["account_id"]),
+        user_id=int(user["user_id"]),
+        status=status,
+        scan_inbox=bool(scan_inbox),
+        scan_sent=bool(scan_sent),
+        inbox_folder_name=inbox_folder_name,
+        sent_folder_name=sent_folder_name,
+        interval_minutes=interval_minutes,
+        max_messages_per_folder=max_messages_per_folder,
+    )
+
+    return RedirectResponse(url="/ingestion", status_code=303)
+
+
+@router.post("/ingestion/run-now", response_class=HTMLResponse)
+def ingestion_run_now_web(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    account_id = int(user["account_id"])
+    jobs = list_mail_ingestion_jobs(db, account_id=account_id)
+
+    if jobs:
+        run_mail_ingestion_job(
+            db,
+            job_id=int(jobs[0]["id"]),
+            user_id=int(user["user_id"]),
+        )
+
+    return RedirectResponse(url="/ingestion", status_code=303)
 
 
 @router.get("/{section}", response_class=HTMLResponse)
