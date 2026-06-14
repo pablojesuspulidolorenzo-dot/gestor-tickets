@@ -35,8 +35,9 @@ def login_form(request: Request):
         return RedirectResponse(url="/app", status_code=303)
 
     return templates.TemplateResponse(
-        "login.html",
-        _template_context(
+        request=request,
+        name="login.html",
+        context=_template_context(
             request,
             error=None,
             login_identifier="sistemas-tic@gestor-tickets.es",
@@ -74,8 +75,9 @@ async def login_submit(
 
     except ValueError as exc:
         return templates.TemplateResponse(
-            "login.html",
-            _template_context(
+            request=request,
+            name="login.html",
+            context=_template_context(
                 request,
                 error=str(exc),
                 login_identifier=login_identifier,
@@ -103,6 +105,7 @@ def app_home(request: Request):
         return RedirectResponse(url="/login", status_code=303)
 
     return templates.TemplateResponse(
-        "app_home.html",
-        _template_context(request, user=user),
+        request=request,
+        name="app_home.html",
+        context=_template_context(request, user=user),
     )
