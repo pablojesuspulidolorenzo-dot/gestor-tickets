@@ -2,8 +2,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.router import api_router
+from app.api.routes.web_auth import router as web_auth_router
 from app.core.config import settings
 from app.core.versioning import get_version_metadata
 
@@ -12,10 +14,18 @@ app = FastAPI(
     version=settings.full_version,
 )
 
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SESSION_SECRET_KEY,
+    same_site="lax",
+    https_only=False,
+)
+
 app.mount("/static", StaticFiles(directory="/app/static"), name="static")
 templates = Jinja2Templates(directory="/app/templates")
 
 app.include_router(api_router, prefix="/api")
+app.include_router(web_auth_router)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -37,7 +47,6 @@ def index(request: Request):
 
 @app.get("/health")
 def root_health():
-    # Compatibilidad: health rápido en raíz y health detallado en /api/health
     return JSONResponse(
         {
             "status": "ok",

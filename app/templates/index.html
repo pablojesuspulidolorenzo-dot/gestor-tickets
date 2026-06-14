@@ -11,6 +11,7 @@
 
     <nav style="display: flex; gap: 8px; margin-left: 24px; flex: 1;">
         <a href="/" class="nav-btn active">Inicio</a>
+        <a href="/login" class="nav-btn">Entrar</a>
         <a href="/health" class="nav-btn">Health</a>
         <a href="/api/health" class="nav-btn">API Health</a>
     </nav>
@@ -32,6 +33,10 @@
             <p class="pane-empty-text">
                 FastAPI está funcionando dentro del contenedor Docker y conectado a PostgreSQL.
             </p>
+
+            <a href="/login" class="nav-btn active" style="margin-top: 16px;">
+                Entrar al gestor
+            </a>
 
             <div
                 hx-get="/htmx/ping"
