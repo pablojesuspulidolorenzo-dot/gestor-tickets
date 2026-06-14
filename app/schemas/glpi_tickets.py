@@ -8,6 +8,10 @@ class CreateGlpiTicketFromThreadRequest(BaseModel):
     title: str | None = None
 
 
+class RefreshGlpiTicketRequest(BaseModel):
+    glpi_password: SecretStr
+
+
 class GlpiTicketCacheSummary(BaseModel):
     id: int
     glpi_ticket_id: int
@@ -64,4 +68,10 @@ class CreateGlpiTicketFromThreadResponse(BaseModel):
     created: bool
     thread_id: int
     glpi_ticket_cache: GlpiTicketCacheSummary
+    message: str
+
+
+class RefreshGlpiTicketResponse(BaseModel):
+    ok: bool
+    ticket: GlpiTicketListItem
     message: str

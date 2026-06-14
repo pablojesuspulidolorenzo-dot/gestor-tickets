@@ -17,6 +17,7 @@ from app.services.glpi_ticket_service import (
     get_glpi_ticket_detail,
     list_glpi_ticket_cache,
     list_glpi_tickets_for_thread,
+    refresh_glpi_ticket_cache,
 )
 from app.services.session_auth_service import authenticate_session_user
 from app.services.thread_service import (
@@ -510,6 +511,32 @@ def ticket_detail_page(
             emails=emails,
         ),
     )
+
+
+
+@router.post("/tickets/{ticket_cache_id}/refresh", response_class=HTMLResponse)
+def ticket_refresh_web(
+    request: Request,
+    ticket_cache_id: int,
+    glpi_password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        refresh_glpi_ticket_cache(
+            db,
+            account_id=int(user["account_id"]),
+            ticket_cache_id=ticket_cache_id,
+            user_id=int(user["user_id"]),
+            glpi_password=glpi_password,
+        )
+    except ValueError:
+        return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)
+
+    return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)
 
 
 @router.get("/{section}", response_class=HTMLResponse)

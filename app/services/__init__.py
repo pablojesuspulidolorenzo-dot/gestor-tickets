@@ -15,6 +15,7 @@ from app.services.glpi_ticket_service import (
     get_glpi_ticket_detail,
     list_glpi_ticket_cache,
     list_glpi_tickets_for_thread,
+    refresh_glpi_ticket_cache,
 )
 from app.services.mailbox_preview_service import (
     list_collaborative_imap_folders,
@@ -46,6 +47,7 @@ __all__ = [
     "list_glpi_tickets_for_thread",
     "preview_collaborative_mailbox",
     "preview_unified_collaborative_mailbox",
+    "refresh_glpi_ticket_cache",
     "test_imap_connection_readonly",
     "test_stored_collaborative_account_imap",
     "upsert_collaborative_account",

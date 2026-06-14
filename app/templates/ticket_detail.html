@@ -67,6 +67,22 @@
                 Detalle cacheado del ticket y relaciones internas con hilos y correos archivados.
             </p>
 
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Refrescar desde GLPI</h3>
+                <p class="pane-empty-text">
+                    La contraseña GLPI se usará solo para actualizar la caché de este ticket y no se guardará.
+                </p>
+                <form method="post" action="/tickets/{{ ticket.id }}/refresh" class="form-stack">
+                    <label class="form-label">
+                        Contraseña GLPI
+                        <input class="form-input" type="password" name="glpi_password" autocomplete="current-password" required>
+                    </label>
+                    <button class="primary-button" type="submit">
+                        Refrescar ticket desde GLPI
+                    </button>
+                </form>
+            </section>
+
             <div class="info-grid">
                 <div class="info-card">
                     <div class="info-label">Ticket GLPI</div>

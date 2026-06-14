@@ -11,11 +11,14 @@ from app.schemas.glpi_tickets import (
     GlpiTicketLinkedThread,
     GlpiTicketListItem,
     GlpiTicketListResponse,
+    RefreshGlpiTicketRequest,
+    RefreshGlpiTicketResponse,
 )
 from app.services.glpi_ticket_service import (
     create_glpi_ticket_from_thread,
     get_glpi_ticket_detail,
     list_glpi_ticket_cache,
+    refresh_glpi_ticket_cache,
 )
 
 router = APIRouter(tags=["glpi-tickets"])
@@ -108,6 +111,33 @@ def ticket_detail(
 
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/cache/{ticket_cache_id}/refresh", response_model=RefreshGlpiTicketResponse)
+def refresh_ticket(
+    ticket_cache_id: int,
+    payload: RefreshGlpiTicketRequest,
+    account_id: int,
+    user_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    try:
+        ticket = refresh_glpi_ticket_cache(
+            db,
+            account_id=account_id,
+            ticket_cache_id=ticket_cache_id,
+            user_id=user_id,
+            glpi_password=payload.glpi_password.get_secret_value(),
+        )
+
+        return RefreshGlpiTicketResponse(
+            ok=True,
+            ticket=_ticket_list_item(ticket),
+            message="Ticket GLPI refrescado correctamente desde la API.",
+        )
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/from-thread/{thread_id}", response_model=CreateGlpiTicketFromThreadResponse)

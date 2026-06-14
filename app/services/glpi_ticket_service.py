@@ -828,3 +828,140 @@ def get_glpi_ticket_detail(
     ).mappings().all()
 
     return dict(ticket), [dict(row) for row in threads], [dict(row) for row in emails]
+
+
+def refresh_glpi_ticket_cache(
+    db: Session,
+    *,
+    account_id: int,
+    ticket_cache_id: int,
+    user_id: int | None,
+    glpi_password: str,
+) -> dict:
+    ticket = db.execute(
+        text("""
+            SELECT
+                id,
+                account_id,
+                glpi_instance_id,
+                glpi_ticket_id
+            FROM gestor_tickets.glpi_ticket_cache
+            WHERE id = :ticket_cache_id
+              AND account_id = :account_id
+            LIMIT 1
+        """),
+        {
+            "account_id": account_id,
+            "ticket_cache_id": ticket_cache_id,
+        },
+    ).mappings().first()
+
+    if not ticket:
+        raise ValueError("El ticket GLPI cacheado no existe para esta cuenta.")
+
+    account = _get_account(db, account_id=account_id)
+    glpi_instance_id = int(ticket["glpi_instance_id"])
+    glpi_ticket_id = int(ticket["glpi_ticket_id"])
+
+    session_token: str | None = None
+
+    request_payload = {
+        "ticket_cache_id": ticket_cache_id,
+        "glpi_ticket_id": glpi_ticket_id,
+        "operation": "refresh_ticket_cache",
+    }
+
+    try:
+        session_token = _init_session(account["glpi_login"], glpi_password)
+
+        raw_ticket = _get_glpi_ticket(
+            session_token=session_token,
+            ticket_id=glpi_ticket_id,
+        )
+
+        cache = _cache_ticket(
+            db,
+            account_id=account_id,
+            glpi_instance_id=glpi_instance_id,
+            ticket_id=glpi_ticket_id,
+            raw_ticket=raw_ticket,
+        )
+
+        _log_glpi_operation(
+            db,
+            account_id=account_id,
+            glpi_instance_id=glpi_instance_id,
+            glpi_ticket_cache_id=int(cache["id"]),
+            operation_type="refresh_ticket_cache",
+            requested_by_user_id=user_id,
+            request_payload=request_payload,
+            response_status_code=200,
+            response_json=raw_ticket,
+            success=True,
+        )
+
+        db.commit()
+
+        row = db.execute(
+            text("""
+                SELECT
+                    gtc.id,
+                    gtc.account_id,
+                    gtc.glpi_instance_id,
+                    gtc.glpi_ticket_id,
+                    gtc.title,
+                    gtc.status,
+                    gtc.priority,
+                    gtc.urgency,
+                    gtc.impact,
+                    (
+                        SELECT count(distinct gttl.id)::int
+                        FROM gestor_tickets.glpi_ticket_thread_links gttl
+                        WHERE gttl.glpi_ticket_cache_id = gtc.id
+                          AND gttl.status = 'active'
+                    ) AS thread_count,
+                    (
+                        SELECT count(distinct gtel.id)::int
+                        FROM gestor_tickets.glpi_ticket_email_links gtel
+                        WHERE gtel.glpi_ticket_cache_id = gtc.id
+                          AND gtel.status = 'active'
+                    ) AS email_count,
+                    gtc.last_sync_at,
+                    gtc.updated_at
+                FROM gestor_tickets.glpi_ticket_cache gtc
+                WHERE gtc.id = :ticket_cache_id
+            """),
+            {"ticket_cache_id": int(cache["id"])},
+        ).mappings().first()
+
+        if not row:
+            raise ValueError("No se pudo recuperar el ticket actualizado.")
+
+        return dict(row)
+
+    except Exception as exc:
+        db.rollback()
+
+        try:
+            _log_glpi_operation(
+                db,
+                account_id=account_id,
+                glpi_instance_id=glpi_instance_id,
+                glpi_ticket_cache_id=ticket_cache_id,
+                operation_type="refresh_ticket_cache",
+                requested_by_user_id=user_id,
+                request_payload=request_payload,
+                response_status_code=None,
+                response_json={},
+                success=False,
+                error_message=str(exc),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        raise
+
+    finally:
+        if session_token:
+            _kill_session(session_token)
