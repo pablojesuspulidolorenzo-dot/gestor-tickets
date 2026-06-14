@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, SecretStr
 
 
 class CollaborativeAccountUpsertRequest(BaseModel):
@@ -59,3 +59,27 @@ class CollaborativeAccountListItem(BaseModel):
     archive_subdir: str
     created_at: datetime
     updated_at: datetime
+
+
+class CollaborativeAccountImapConfigRequest(BaseModel):
+    imap_host: str = Field(..., min_length=1)
+    imap_port: int = Field(993, ge=1, le=65535)
+    imap_use_ssl: bool = True
+    imap_username: str = Field(..., min_length=1)
+    imap_password: SecretStr = Field(..., min_length=1)
+    mailbox: str = Field("INBOX", min_length=1)
+
+
+class CollaborativeAccountImapTestResponse(BaseModel):
+    ok: bool
+    account_id: int
+    account_email: str
+    imap_host: str
+    imap_port: int
+    imap_use_ssl: bool
+    imap_username: str
+    mailbox: str
+    message_count: int | None
+    readonly_mode: bool
+    safety_notes: list[str]
+    message: str
