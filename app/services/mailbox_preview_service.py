@@ -23,6 +23,33 @@ SAFETY_NOTES = [
     "No se marca ningún correo como leído.",
 ]
 
+FOLDER_SAFETY_NOTES = [
+    "La detección de carpetas usa únicamente IMAP LIST.",
+    "No se abre ningún buzón.",
+    "No se leen mensajes.",
+    "No se ejecuta FETCH.",
+    "No se ejecuta STORE.",
+    "No se modifican FLAGS.",
+]
+
+
+@dataclass(frozen=True)
+class ImapFolder:
+    name: str
+    delimiter: str | None
+    flags: list[str]
+    is_inbox: bool
+    is_sent_candidate: bool
+
+
+@dataclass(frozen=True)
+class ImapFoldersResult:
+    ok: bool
+    account: CollaborativeAccount
+    folders: list[ImapFolder]
+    detected_inbox: str | None
+    sent_candidates: list[str]
+
 
 @dataclass(frozen=True)
 class PreviewMessage:
@@ -118,13 +145,7 @@ def _extract_header_bytes(fetch_data) -> tuple[bytes | None, list[str]]:
     return header_bytes, flags
 
 
-def preview_collaborative_mailbox(
-    db: Session,
-    *,
-    account_id: int,
-    mailbox: str = "INBOX",
-    limit: int = 20,
-) -> MailboxPreview:
+def _get_account_and_password(db: Session, account_id: int) -> tuple[CollaborativeAccount, str]:
     account = db.execute(
         select(CollaborativeAccount).where(CollaborativeAccount.id == account_id)
     ).scalar_one_or_none()
@@ -135,30 +156,154 @@ def preview_collaborative_mailbox(
     if not account.imap_host or not account.imap_username or not account.imap_password_ciphertext:
         raise ValueError("La cuenta colaborativa no tiene configuración IMAP completa.")
 
+    return account, decrypt_text(account.imap_password_ciphertext)
+
+
+def _connect(account: CollaborativeAccount, password: str):
+    if account.imap_use_ssl:
+        connection = imaplib.IMAP4_SSL(
+            host=account.imap_host,
+            port=account.imap_port,
+            timeout=30,
+        )
+    else:
+        connection = imaplib.IMAP4(
+            host=account.imap_host,
+            port=account.imap_port,
+            timeout=30,
+        )
+
+    login_status, login_data = connection.login(account.imap_username, password)
+    if login_status != "OK":
+        raise ValueError(f"Login IMAP rechazado: {login_data!r}")
+
+    return connection
+
+
+def _parse_list_line(raw_line) -> ImapFolder | None:
+    if isinstance(raw_line, bytes):
+        line = raw_line.decode("utf-8", errors="ignore")
+    else:
+        line = str(raw_line)
+
+    line = line.strip()
+    if not line:
+        return None
+
+    # Formato típico: (\HasNoChildren) "/" "INBOX"
+    match = re.match(r'^\((?P<flags>.*?)\)\s+"?(?P<delimiter>[^"\s]*)"?\s+"?(?P<name>.*)"?$', line)
+    if not match:
+        return ImapFolder(
+            name=line.strip('"'),
+            delimiter=None,
+            flags=[],
+            is_inbox=line.upper() == "INBOX",
+            is_sent_candidate=False,
+        )
+
+    flags_text = match.group("flags") or ""
+    delimiter = match.group("delimiter") or None
+    name = (match.group("name") or "").strip().strip('"')
+
+    flags = [item.strip() for item in flags_text.split() if item.strip()]
+    lowered = name.lower()
+    flags_lowered = " ".join(flags).lower()
+
+    sent_terms = [
+        "sent",
+        "sent items",
+        "sent messages",
+        "enviados",
+        "enviado",
+        "elementos enviados",
+        "correo enviado",
+        "correos enviados",
+    ]
+
+    is_sent_candidate = (
+        "\\sent" in flags_lowered
+        or lowered in sent_terms
+        or lowered.endswith("/sent")
+        or lowered.endswith(".sent")
+        or lowered.endswith("/enviados")
+        or lowered.endswith(".enviados")
+        or "sent" in lowered
+        or "enviad" in lowered
+    )
+
+    return ImapFolder(
+        name=name,
+        delimiter=delimiter,
+        flags=flags,
+        is_inbox=lowered == "inbox",
+        is_sent_candidate=is_sent_candidate,
+    )
+
+
+def list_collaborative_imap_folders(
+    db: Session,
+    *,
+    account_id: int,
+) -> ImapFoldersResult:
+    account, password = _get_account_and_password(db, account_id)
+    connection = None
+
+    try:
+        connection = _connect(account, password)
+
+        status, data = connection.list()
+        if status != "OK":
+            raise ValueError(f"No se pudo listar carpetas IMAP: {data!r}")
+
+        folders = [
+            folder
+            for folder in (_parse_list_line(line) for line in data or [])
+            if folder is not None and folder.name
+        ]
+
+        folders = sorted(folders, key=lambda item: (not item.is_inbox, item.name.lower()))
+
+        detected_inbox = next((item.name for item in folders if item.is_inbox), None)
+        sent_candidates = [item.name for item in folders if item.is_sent_candidate]
+
+        return ImapFoldersResult(
+            ok=True,
+            account=account,
+            folders=folders,
+            detected_inbox=detected_inbox,
+            sent_candidates=sent_candidates,
+        )
+
+    except imaplib.IMAP4.error as exc:
+        raise ValueError(f"Error IMAP: {exc}") from exc
+
+    except OSError as exc:
+        raise ValueError(f"Error de conexión IMAP: {exc}") from exc
+
+    finally:
+        if connection is not None:
+            try:
+                connection.logout()
+            except Exception:
+                pass
+
+
+def preview_collaborative_mailbox(
+    db: Session,
+    *,
+    account_id: int,
+    mailbox: str = "INBOX",
+    limit: int = 20,
+) -> MailboxPreview:
+    account, password = _get_account_and_password(db, account_id)
+
     mailbox = _clean_text(mailbox) or "INBOX"
     limit = max(1, min(int(limit), 50))
-
-    password = decrypt_text(account.imap_password_ciphertext)
 
     connection = None
 
     try:
-        if account.imap_use_ssl:
-            connection = imaplib.IMAP4_SSL(
-                host=account.imap_host,
-                port=account.imap_port,
-                timeout=30,
-            )
-        else:
-            connection = imaplib.IMAP4(
-                host=account.imap_host,
-                port=account.imap_port,
-                timeout=30,
-            )
-
-        login_status, login_data = connection.login(account.imap_username, password)
-        if login_status != "OK":
-            raise ValueError(f"Login IMAP rechazado: {login_data!r}")
+        connection = _connect(account, password)
 
         status, select_data = connection.select(mailbox=mailbox, readonly=True)
         if status != "OK":
