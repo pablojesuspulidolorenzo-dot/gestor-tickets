@@ -9,6 +9,13 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.versioning import get_version_metadata
+from app.services.collaborator_service import (
+    create_local_collaborator,
+    get_user_permissions,
+    list_account_users,
+    set_local_collaborator_status,
+    update_local_collaborator,
+)
 from app.services.email_archive_service import (
     archive_message_from_imap_readonly,
     find_archived_message_for_occurrence,
@@ -101,6 +108,35 @@ def require_session_user(request: Request) -> dict | RedirectResponse:
     return user
 
 
+def _ensure_session_permissions(user: dict, db: Session) -> dict:
+    permission_keys = {
+        "can_manage_users",
+        "can_manage_account_config",
+        "can_read_account_mail",
+        "can_reply_from_account",
+        "can_create_glpi_ticket",
+        "can_update_glpi_ticket",
+        "can_link_tickets",
+        "can_manage_ai",
+    }
+    if permission_keys.issubset(user.keys()):
+        return user
+
+    permissions = get_user_permissions(
+        db,
+        user_id=int(user["user_id"]),
+        account_id=int(user["account_id"]),
+    )
+    user.update(permissions)
+    return user
+
+
+def _require_permission(user: dict, permission: str):
+    if not user.get(permission):
+        return RedirectResponse(url="/app", status_code=303)
+    return None
+
+
 @router.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
     if get_session_user(request):
@@ -141,6 +177,14 @@ async def login_submit(
             "display_name": user.display_name,
             "role": user.role,
             "auth_mode": user.auth_mode,
+            "can_manage_users": user.can_manage_users,
+            "can_manage_account_config": user.can_manage_account_config,
+            "can_read_account_mail": user.can_read_account_mail,
+            "can_reply_from_account": user.can_reply_from_account,
+            "can_create_glpi_ticket": user.can_create_glpi_ticket,
+            "can_update_glpi_ticket": user.can_update_glpi_ticket,
+            "can_link_tickets": user.can_link_tickets,
+            "can_manage_ai": user.can_manage_ai,
         }
 
         return RedirectResponse(url="/app", status_code=303)
@@ -191,6 +235,10 @@ def mailbox_page(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
 
     try:
         preview = preview_unified_collaborative_mailbox(
@@ -251,6 +299,10 @@ def mailbox_message_page(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
 
     try:
         detail = fetch_message_detail_readonly(
@@ -326,6 +378,10 @@ def mailbox_message_archive_web(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_link_tickets")
+    if denied:
+        return denied
 
     try:
         archive_message_from_imap_readonly(
@@ -357,6 +413,10 @@ def mailbox_message_create_thread_web(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_link_tickets")
+    if denied:
+        return denied
 
     try:
         create_thread_from_email(
@@ -383,6 +443,10 @@ def threads_page(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
 
     threads = list_system_threads(db, account_id=int(user["account_id"]))
 
@@ -408,6 +472,10 @@ def thread_detail_page(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
 
     try:
         thread, messages = get_thread_detail(
@@ -449,6 +517,10 @@ def thread_create_glpi_ticket_web(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_create_glpi_ticket")
+    if denied:
+        return denied
 
     try:
         create_glpi_ticket_from_thread(
@@ -474,6 +546,10 @@ def tickets_page(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
 
     tickets = list_glpi_ticket_cache(
         db,
@@ -501,6 +577,10 @@ def ticket_detail_page(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
 
     try:
         ticket, threads, emails, operations = get_glpi_ticket_detail(
@@ -537,6 +617,10 @@ def ticket_refresh_web(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_update_glpi_ticket")
+    if denied:
+        return denied
 
     try:
         refresh_glpi_ticket_cache(
@@ -565,6 +649,10 @@ def ticket_followup_web(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_update_glpi_ticket")
+    if denied:
+        return denied
 
     try:
         add_glpi_followup_to_ticket(
@@ -594,6 +682,10 @@ def ticket_attach_email_web(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_update_glpi_ticket")
+    if denied:
+        return denied
 
     try:
         attach_email_eml_to_glpi_ticket(
@@ -689,6 +781,10 @@ def ingestion_page(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_manage_account_config")
+    if denied:
+        return denied
 
     account_id = int(user["account_id"])
     jobs = list_mail_ingestion_jobs(db, account_id=account_id)
@@ -718,6 +814,10 @@ def ingestion_run_detail_page(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_manage_account_config")
+    if denied:
+        return denied
 
     account_id = int(user["account_id"])
     run = _get_ingestion_run_for_account(db, account_id=account_id, run_id=run_id)
@@ -761,6 +861,10 @@ def ingestion_configure_web(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_manage_account_config")
+    if denied:
+        return denied
 
     configure_mail_ingestion_job(
         db,
@@ -786,6 +890,10 @@ def ingestion_reactivate_web(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_manage_account_config")
+    if denied:
+        return denied
 
     reactivate_mail_ingestion_job(
         db,
@@ -804,6 +912,10 @@ def ingestion_run_now_web(
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_manage_account_config")
+    if denied:
+        return denied
 
     account_id = int(user["account_id"])
     jobs = list_mail_ingestion_jobs(db, account_id=account_id)
@@ -820,6 +932,152 @@ def ingestion_run_now_web(
             pass
 
     return RedirectResponse(url="/ingestion", status_code=303)
+
+
+def _selected_permissions(values: set[str]) -> dict[str, bool]:
+    return {
+        "can_manage_users": "can_manage_users" in values,
+        "can_manage_account_config": "can_manage_account_config" in values,
+        "can_read_account_mail": "can_read_account_mail" in values,
+        "can_reply_from_account": "can_reply_from_account" in values,
+        "can_create_glpi_ticket": "can_create_glpi_ticket" in values,
+        "can_update_glpi_ticket": "can_update_glpi_ticket" in values,
+        "can_link_tickets": "can_link_tickets" in values,
+        "can_manage_ai": False,
+    }
+
+
+def _require_manage_users(user: dict):
+    if not user.get("can_manage_users"):
+        return RedirectResponse(url="/app", status_code=303)
+    return None
+
+
+@router.get("/accounts", response_class=HTMLResponse)
+def accounts_page(request: Request, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_users(user)
+    if denied:
+        return denied
+
+    collaborators = list_account_users(db, account_id=int(user["account_id"]))
+    return templates.TemplateResponse(
+        request=request,
+        name="accounts.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="accounts",
+            collaborators=collaborators,
+            error=None,
+        ),
+    )
+
+
+@router.post("/accounts/collaborators", response_class=HTMLResponse)
+def accounts_create_collaborator(
+    request: Request,
+    username_local: str = Form(...),
+    display_name: str = Form(...),
+    password: str = Form(...),
+    contact_email: str | None = Form(None),
+    role: str = Form("collaborator"),
+    permissions: list[str] = Form([]),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_users(user)
+    if denied:
+        return denied
+
+    try:
+        create_local_collaborator(
+            db,
+            account_id=int(user["account_id"]),
+            username_local=username_local,
+            display_name=display_name,
+            password=password,
+            contact_email=contact_email,
+            role=role,
+            permissions=_selected_permissions(set(permissions)),
+            created_by_user_id=int(user["user_id"]),
+        )
+    except ValueError:
+        pass
+
+    return RedirectResponse(url="/accounts", status_code=303)
+
+
+@router.post("/accounts/collaborators/{collaborator_id}/update", response_class=HTMLResponse)
+def accounts_update_collaborator(
+    request: Request,
+    collaborator_id: int,
+    display_name: str = Form(...),
+    contact_email: str | None = Form(None),
+    role: str = Form("collaborator"),
+    permissions: list[str] = Form([]),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_users(user)
+    if denied:
+        return denied
+
+    try:
+        update_local_collaborator(
+            db,
+            account_id=int(user["account_id"]),
+            user_id=collaborator_id,
+            display_name=display_name,
+            contact_email=contact_email,
+            role=role,
+            permissions=_selected_permissions(set(permissions)),
+        )
+    except ValueError:
+        pass
+
+    return RedirectResponse(url="/accounts", status_code=303)
+
+
+@router.post("/accounts/collaborators/{collaborator_id}/status", response_class=HTMLResponse)
+def accounts_set_collaborator_status(
+    request: Request,
+    collaborator_id: int,
+    status: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_users(user)
+    if denied:
+        return denied
+
+    try:
+        set_local_collaborator_status(
+            db,
+            account_id=int(user["account_id"]),
+            user_id=collaborator_id,
+            status=status,
+        )
+    except ValueError:
+        pass
+
+    return RedirectResponse(url="/accounts", status_code=303)
 
 
 @router.get("/{section}", response_class=HTMLResponse)

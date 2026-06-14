@@ -24,6 +24,14 @@ class AuthenticatedSessionUser:
     display_name: str
     role: str
     auth_mode: str
+    can_manage_users: bool
+    can_manage_account_config: bool
+    can_read_account_mail: bool
+    can_reply_from_account: bool
+    can_create_glpi_ticket: bool
+    can_update_glpi_ticket: bool
+    can_link_tickets: bool
+    can_manage_ai: bool
 
 
 def _now() -> datetime:
@@ -129,8 +137,16 @@ async def authenticate_session_user(
             login_identifier=clean_login,
             display_name=user.display_name,
             role=user.role,
-            auth_mode=user.auth_mode,
-        )
+        auth_mode=user.auth_mode,
+        can_manage_users=bool(user.can_manage_users),
+        can_manage_account_config=bool(user.can_manage_account_config),
+        can_read_account_mail=bool(user.can_read_account_mail),
+        can_reply_from_account=bool(user.can_reply_from_account),
+        can_create_glpi_ticket=bool(user.can_create_glpi_ticket),
+        can_update_glpi_ticket=bool(user.can_update_glpi_ticket),
+        can_link_tickets=bool(user.can_link_tickets),
+        can_manage_ai=bool(user.can_manage_ai),
+    )
 
     account = db.execute(
         select(CollaborativeAccount).where(CollaborativeAccount.email == clean_login)
@@ -193,4 +209,12 @@ async def authenticate_session_user(
         display_name=user.display_name,
         role=user.role,
         auth_mode=user.auth_mode,
+        can_manage_users=bool(user.can_manage_users),
+        can_manage_account_config=bool(user.can_manage_account_config),
+        can_read_account_mail=bool(user.can_read_account_mail),
+        can_reply_from_account=bool(user.can_reply_from_account),
+        can_create_glpi_ticket=bool(user.can_create_glpi_ticket),
+        can_update_glpi_ticket=bool(user.can_update_glpi_ticket),
+        can_link_tickets=bool(user.can_link_tickets),
+        can_manage_ai=bool(user.can_manage_ai),
     )
