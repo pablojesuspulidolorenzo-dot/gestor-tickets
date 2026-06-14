@@ -9,6 +9,7 @@ from app.services.collaborative_imap_service import (
     test_stored_collaborative_account_imap,
 )
 from app.services.glpi_service import GlpiService, glpi_service
+from app.services.mailbox_preview_service import preview_collaborative_mailbox
 
 __all__ = [
     "GlpiService",
@@ -16,6 +17,7 @@ __all__ = [
     "create_audit_log",
     "glpi_service",
     "list_collaborative_accounts",
+    "preview_collaborative_mailbox",
     "test_imap_connection_readonly",
     "test_stored_collaborative_account_imap",
     "upsert_collaborative_account",

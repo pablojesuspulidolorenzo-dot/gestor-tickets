@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.versioning import get_version_metadata
+from app.services.mailbox_preview_service import SAFETY_NOTES, preview_collaborative_mailbox
 from app.services.session_auth_service import authenticate_session_user
 
 router = APIRouter()
@@ -13,16 +14,6 @@ templates = Jinja2Templates(directory="/app/templates")
 
 
 SECTION_DEFINITIONS = {
-    "mailbox": {
-        "title": "Bandeja",
-        "icon": "📥",
-        "description": "Aquí se mostrará la bandeja unificada de la cuenta colaborativa.",
-        "next_steps": [
-            "Conectar lectura IMAP en modo seguro sin marcar correos como leídos.",
-            "Mostrar entrada y enviados de la cuenta colaborativa.",
-            "Preparar deduplicación por Message-ID y UID interno del sistema.",
-        ],
-    },
     "threads": {
         "title": "Hilos",
         "icon": "🧵",
@@ -169,6 +160,63 @@ def app_home(request: Request):
         request=request,
         name="app_home.html",
         context=_template_context(request, user=user, active_section="panel"),
+    )
+
+
+@router.get("/mailbox", response_class=HTMLResponse)
+def mailbox_page(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        preview = preview_collaborative_mailbox(
+            db,
+            account_id=int(user["account_id"]),
+            mailbox="INBOX",
+            limit=20,
+        )
+        error = None
+    except ValueError as exc:
+        preview = None
+        error = str(exc)
+
+    if error:
+        return templates.TemplateResponse(
+            request=request,
+            name="section_page.html",
+            context=_template_context(
+                request,
+                user=user,
+                active_section="mailbox",
+                section_key="mailbox",
+                section={
+                    "title": "Bandeja",
+                    "icon": "📥",
+                    "description": error,
+                    "next_steps": [
+                        "Revisar la configuración IMAP de la cuenta.",
+                        "Validar host, puerto, usuario y contraseña.",
+                        "Mantener siempre lectura en modo readonly.",
+                    ],
+                },
+            ),
+            status_code=400,
+        )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="mailbox.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="mailbox",
+            preview=preview,
+            safety_notes=SAFETY_NOTES,
+        ),
     )
 
 

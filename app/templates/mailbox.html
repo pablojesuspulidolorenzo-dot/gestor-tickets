@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Bandeja - Gestor Tickets{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
+
+    <nav class="top-nav">
+        <a href="/app" class="nav-btn">Panel</a>
+        <a href="/mailbox" class="nav-btn active">Bandeja</a>
+        <a href="/threads" class="nav-btn">Hilos</a>
+        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
+        <a href="/accounts" class="nav-btn">Cuentas</a>
+        <a href="/settings" class="nav-btn">Configuración</a>
+    </nav>
+
+    <div class="system-status">
+        <span class="version-text">{{ version.full }}</span>
+        <form method="post" action="/logout">
+            <button class="logout-button">Salir</button>
+        </form>
+    </div>
+</header>
+
+<main class="app-container">
+    <section class="thread-list-panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Bandeja {{ preview.mailbox }}</h2>
+        </div>
+
+        <div class="message-scroll-area">
+            {% if preview.messages %}
+                {% for message in preview.messages %}
+                <article class="message-item">
+                    <div class="message-meta">
+                        <span class="message-sender">{{ message.from_ }}</span>
+                        <span>UID {{ message.uid }}</span>
+                    </div>
+                    <div class="message-subject">{{ message.subject }}</div>
+                    <div class="message-snippet">
+                        {{ message.date or "Sin fecha" }}
+                        {% if message.seen %}
+                            · leído
+                        {% else %}
+                            · no leído
+                        {% endif %}
+                    </div>
+                </article>
+                {% endfor %}
+            {% else %}
+                <article class="message-item active">
+                    <div class="message-subject">No hay mensajes en esta bandeja</div>
+                    <div class="message-snippet">
+                        La conexión IMAP funciona, pero {{ preview.mailbox }} tiene 0 mensajes.
+                    </div>
+                </article>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="reading-ai-panel">
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">📥</div>
+            <h2 style="margin: 0 0 8px;">Preview IMAP seguro</h2>
+            <p class="pane-empty-text">
+                Esta vista lee solo cabeceras mediante IMAP en modo solo lectura. No descarga cuerpos,
+                no modifica flags y no marca correos como leídos.
+            </p>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">Cuenta</div>
+                    <div class="info-value">{{ preview.account.email }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Total en buzón</div>
+                    <div class="info-value">{{ preview.total_messages }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Mostrados</div>
+                    <div class="info-value">{{ preview.messages|length }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Modo</div>
+                    <div class="info-value">EXAMINE / readonly=True</div>
+                </div>
+            </div>
+
+            <pre class="code-box">{% for note in safety_notes %}- {{ note }}
+{% endfor %}</pre>
+        </div>
+    </section>
+</main>
+{% endblock %}
