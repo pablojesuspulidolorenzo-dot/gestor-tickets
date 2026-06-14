@@ -21,6 +21,103 @@ VALID_JOB_STATUSES = {
 }
 
 
+AUTH_ERROR_MARKERS = (
+    "authentication failed",
+    "authenticationfailure",
+    "login failed",
+    "invalid credentials",
+    "invalid password",
+    "username and password not accepted",
+    "credentials rejected",
+    "auth failed",
+    "password",
+    "contraseña",
+    "autentic",
+    "credencial",
+)
+
+
+def _classify_ingestion_error(exc: Exception) -> str:
+    message = f"{type(exc).__name__}: {exc}".lower()
+
+    if any(marker in message for marker in AUTH_ERROR_MARKERS):
+        return "auth"
+
+    if any(marker in message for marker in ("timeout", "connection", "network", "refused", "unreachable")):
+        return "connection"
+
+    return "unknown"
+
+
+def _apply_auth_failure_policy(
+    db: Session,
+    *,
+    job: dict,
+    exc: Exception,
+) -> None:
+    error_kind = _classify_ingestion_error(exc)
+
+    if error_kind != "auth":
+        return
+
+    account_id = int(job["account_id"])
+    job_id = int(job["id"])
+    previous_failures = int(job.get("auth_failure_count") or 0)
+    new_failures = previous_failures + 1
+    message = f"{type(exc).__name__}: {exc}"[:1500]
+
+    if new_failures >= 2:
+        db.execute(
+            text("""
+                UPDATE gestor_tickets.mail_ingestion_jobs
+                SET status = 'error_auth',
+                    auth_failure_count = :auth_failure_count,
+                    last_error_at = now(),
+                    last_error_message = :message,
+                    next_run_at = NULL,
+                    updated_at = now()
+                WHERE id = :job_id
+            """),
+            {
+                "job_id": job_id,
+                "auth_failure_count": new_failures,
+                "message": message,
+            },
+        )
+
+        db.execute(
+            text("""
+                UPDATE gestor_tickets.collaborative_accounts
+                SET status = 'error_auth',
+                    ingestion_enabled = false,
+                    updated_at = now()
+                WHERE id = :account_id
+            """),
+            {"account_id": account_id},
+        )
+
+    else:
+        db.execute(
+            text("""
+                UPDATE gestor_tickets.mail_ingestion_jobs
+                SET status = 'active',
+                    auth_failure_count = :auth_failure_count,
+                    last_error_at = now(),
+                    last_error_message = :message,
+                    next_run_at = now() + interval '2 minutes',
+                    updated_at = now()
+                WHERE id = :job_id
+            """),
+            {
+                "job_id": job_id,
+                "auth_failure_count": new_failures,
+                "message": message,
+            },
+        )
+
+    db.commit()
+
+
 def _plain(value: Any) -> Any:
     if hasattr(value, "model_dump"):
         return value.model_dump()
@@ -619,6 +716,8 @@ def run_mail_ingestion_job(
             error_message=str(exc),
             details=details,
         )
+
+        _apply_auth_failure_policy(db, job=job, exc=exc)
 
         raise
 

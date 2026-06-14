@@ -67,6 +67,8 @@ def configure_job(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Error interno durante la ingesta IMAP.") from exc
 
 
 @router.post("/jobs/{job_id}/run-now", response_model=MailIngestionRunResponse)
@@ -89,6 +91,8 @@ def run_job_now(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Error interno durante la ingesta IMAP.") from exc
 
 
 @router.post("/jobs/run-due")

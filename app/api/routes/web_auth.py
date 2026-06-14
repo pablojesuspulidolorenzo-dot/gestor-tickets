@@ -710,11 +710,15 @@ def ingestion_run_now_web(
     jobs = list_mail_ingestion_jobs(db, account_id=account_id)
 
     if jobs:
-        run_mail_ingestion_job(
-            db,
-            job_id=int(jobs[0]["id"]),
-            user_id=int(user["user_id"]),
-        )
+        try:
+            run_mail_ingestion_job(
+                db,
+                job_id=int(jobs[0]["id"]),
+                user_id=int(user["user_id"]),
+            )
+        except Exception:
+            # La ejecución ya queda registrada en mail_ingestion_runs y en el estado del job.
+            pass
 
     return RedirectResponse(url="/ingestion", status_code=303)
 
