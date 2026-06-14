@@ -6,29 +6,24 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.versioning import get_version_metadata
-from app.services.mailbox_preview_service import SAFETY_NOTES, preview_unified_collaborative_mailbox
-from app.services.message_detail_service import MESSAGE_DETAIL_SAFETY_NOTES, fetch_message_detail_readonly
 from app.services.email_archive_service import (
     archive_message_from_imap_readonly,
     find_archived_message_for_occurrence,
 )
+from app.services.mailbox_preview_service import SAFETY_NOTES, preview_unified_collaborative_mailbox
+from app.services.message_detail_service import MESSAGE_DETAIL_SAFETY_NOTES, fetch_message_detail_readonly
 from app.services.session_auth_service import authenticate_session_user
+from app.services.thread_service import (
+    create_thread_from_email,
+    get_active_thread_for_email,
+    list_system_threads,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="/app/templates")
 
 
 SECTION_DEFINITIONS = {
-    "threads": {
-        "title": "Hilos",
-        "icon": "🧵",
-        "description": "Aquí se mostrarán los hilos operativos del sistema.",
-        "next_steps": [
-            "Agrupar mensajes por referencias, asunto y reglas internas.",
-            "Permitir mover correos entre hilos.",
-            "Permitir fusionar hilos y mantener auditoría.",
-        ],
-    },
     "tickets": {
         "title": "Tickets GLPI",
         "icon": "🎫",
@@ -226,7 +221,6 @@ def mailbox_page(
     )
 
 
-
 @router.get("/mailbox/message", response_class=HTMLResponse)
 def mailbox_message_page(
     request: Request,
@@ -251,9 +245,17 @@ def mailbox_message_page(
             mailbox=mailbox,
             uid=uid,
         )
+        thread = None
+        if archived:
+            thread = get_active_thread_for_email(
+                db,
+                email_message_id=int(archived["email_message_id"]),
+            )
         error = None
     except ValueError as exc:
         detail = None
+        archived = None
+        thread = None
         error = str(exc)
 
     if error:
@@ -288,10 +290,10 @@ def mailbox_message_page(
             active_section="mailbox",
             message=detail,
             archived=archived,
+            thread=thread,
             safety_notes=MESSAGE_DETAIL_SAFETY_NOTES,
         ),
     )
-
 
 
 @router.post("/mailbox/message/archive", response_class=HTMLResponse)
@@ -321,6 +323,58 @@ def mailbox_message_archive_web(
     return RedirectResponse(
         url=f"/mailbox/message?mailbox={mailbox}&uid={uid}&archived=1",
         status_code=303,
+    )
+
+
+@router.post("/mailbox/message/create-thread", response_class=HTMLResponse)
+def mailbox_message_create_thread_web(
+    request: Request,
+    mailbox: str,
+    uid: str,
+    email_message_id: int,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        create_thread_from_email(
+            db,
+            account_id=int(user["account_id"]),
+            email_message_id=email_message_id,
+            created_by_user_id=int(user["user_id"]),
+            reason="Creación manual desde detalle de correo.",
+        )
+    except ValueError:
+        return RedirectResponse(
+            url=f"/mailbox/message?mailbox={mailbox}&uid={uid}",
+            status_code=303,
+        )
+
+    return RedirectResponse(url="/threads", status_code=303)
+
+
+@router.get("/threads", response_class=HTMLResponse)
+def threads_page(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    threads = list_system_threads(db, account_id=int(user["account_id"]))
+
+    return templates.TemplateResponse(
+        request=request,
+        name="threads.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="threads",
+            threads=threads,
+        ),
     )
 
 

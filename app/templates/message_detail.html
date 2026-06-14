@@ -88,6 +88,18 @@
             <div class="scheduled-alert scheduled-alert-success" style="margin: 18px 0;">
                 Este correo ya está archivado en el sistema como email_messages.id={{ archived.email_message_id }}.
             </div>
+
+                {% if thread %}
+                <div class="scheduled-alert scheduled-alert-success" style="margin: 18px 0;">
+                    Hilo operativo creado: #{{ thread.id }} · {{ thread.title }}
+                </div>
+                {% else %}
+                <form method="post" action="/mailbox/message/create-thread?mailbox={{ message.mailbox|urlencode }}&uid={{ message.uid|urlencode }}&email_message_id={{ archived.email_message_id }}" style="margin: 18px 0;">
+                    <button class="primary-button" type="submit">
+                        Crear hilo operativo
+                    </button>
+                </form>
+                {% endif %}
             {% else %}
             <form method="post" action="/mailbox/message/archive?mailbox={{ message.mailbox|urlencode }}&uid={{ message.uid|urlencode }}" style="margin: 18px 0;">
                 <button class="primary-button" type="submit">

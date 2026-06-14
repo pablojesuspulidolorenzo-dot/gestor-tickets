@@ -16,16 +16,24 @@ from app.services.mailbox_preview_service import (
     preview_unified_collaborative_mailbox,
 )
 from app.services.message_detail_service import fetch_message_detail_readonly
+from app.services.thread_service import (
+    create_thread_from_email,
+    get_active_thread_for_email,
+    list_system_threads,
+)
 
 __all__ = [
     "GlpiService",
     "archive_message_from_imap_readonly",
     "configure_collaborative_account_imap",
     "create_audit_log",
+    "create_thread_from_email",
     "fetch_message_detail_readonly",
+    "get_active_thread_for_email",
     "glpi_service",
     "list_collaborative_accounts",
     "list_collaborative_imap_folders",
+    "list_system_threads",
     "preview_collaborative_mailbox",
     "preview_unified_collaborative_mailbox",
     "test_imap_connection_readonly",

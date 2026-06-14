@@ -481,3 +481,16 @@ a {
     background: #fff7ed;
     border-color: #fed7aa;
 }
+
+.thread-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    padding: 7px 10px;
+    background: #eef2ff;
+    color: #3730a3;
+    border: 1px solid #c7d2fe;
+    font-weight: 800;
+    font-size: 0.84rem;
+}
