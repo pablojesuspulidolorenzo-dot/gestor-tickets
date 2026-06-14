@@ -14,6 +14,8 @@ from app.services.mailbox_preview_service import SAFETY_NOTES, preview_unified_c
 from app.services.message_detail_service import MESSAGE_DETAIL_SAFETY_NOTES, fetch_message_detail_readonly
 from app.services.glpi_ticket_service import (
     create_glpi_ticket_from_thread,
+    get_glpi_ticket_detail,
+    list_glpi_ticket_cache,
     list_glpi_tickets_for_thread,
 )
 from app.services.session_auth_service import authenticate_session_user
@@ -448,6 +450,66 @@ def thread_create_glpi_ticket_web(
         return RedirectResponse(url=f"/threads/{thread_id}", status_code=303)
 
     return RedirectResponse(url=f"/threads/{thread_id}", status_code=303)
+
+
+
+@router.get("/tickets", response_class=HTMLResponse)
+def tickets_page(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    tickets = list_glpi_ticket_cache(
+        db,
+        account_id=int(user["account_id"]),
+    )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="tickets.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="tickets",
+            tickets=tickets,
+        ),
+    )
+
+
+@router.get("/tickets/{ticket_cache_id}", response_class=HTMLResponse)
+def ticket_detail_page(
+    request: Request,
+    ticket_cache_id: int,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        ticket, threads, emails = get_glpi_ticket_detail(
+            db,
+            account_id=int(user["account_id"]),
+            ticket_cache_id=ticket_cache_id,
+        )
+    except ValueError:
+        return RedirectResponse(url="/tickets", status_code=303)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="ticket_detail.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="tickets",
+            ticket=ticket,
+            threads=threads,
+            emails=emails,
+        ),
+    )
 
 
 @router.get("/{section}", response_class=HTMLResponse)

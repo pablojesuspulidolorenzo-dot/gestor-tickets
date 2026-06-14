@@ -694,3 +694,137 @@ def list_glpi_tickets_for_thread(
     ).mappings().all()
 
     return [dict(row) for row in rows]
+
+
+def list_glpi_ticket_cache(
+    db: Session,
+    *,
+    account_id: int,
+) -> list[dict]:
+    rows = db.execute(
+        text("""
+            SELECT
+                gtc.id,
+                gtc.account_id,
+                gtc.glpi_instance_id,
+                gtc.glpi_ticket_id,
+                gtc.title,
+                gtc.status,
+                gtc.priority,
+                gtc.urgency,
+                gtc.impact,
+                count(distinct gttl.id)::int AS thread_count,
+                count(distinct gtel.id)::int AS email_count,
+                gtc.last_sync_at,
+                gtc.updated_at
+            FROM gestor_tickets.glpi_ticket_cache gtc
+            LEFT JOIN gestor_tickets.glpi_ticket_thread_links gttl
+              ON gttl.glpi_ticket_cache_id = gtc.id
+             AND gttl.status = 'active'
+            LEFT JOIN gestor_tickets.glpi_ticket_email_links gtel
+              ON gtel.glpi_ticket_cache_id = gtc.id
+             AND gtel.status = 'active'
+            WHERE gtc.account_id = :account_id
+            GROUP BY gtc.id
+            ORDER BY coalesce(gtc.last_sync_at, gtc.updated_at) DESC, gtc.id DESC
+        """),
+        {"account_id": account_id},
+    ).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
+def get_glpi_ticket_detail(
+    db: Session,
+    *,
+    account_id: int,
+    ticket_cache_id: int,
+) -> tuple[dict, list[dict], list[dict]]:
+    ticket = db.execute(
+        text("""
+            SELECT
+                gtc.id,
+                gtc.account_id,
+                gtc.glpi_instance_id,
+                gtc.glpi_ticket_id,
+                gtc.title,
+                gtc.status,
+                gtc.priority,
+                gtc.urgency,
+                gtc.impact,
+                (
+                    SELECT count(distinct gttl.id)::int
+                    FROM gestor_tickets.glpi_ticket_thread_links gttl
+                    WHERE gttl.glpi_ticket_cache_id = gtc.id
+                      AND gttl.status = 'active'
+                ) AS thread_count,
+                (
+                    SELECT count(distinct gtel.id)::int
+                    FROM gestor_tickets.glpi_ticket_email_links gtel
+                    WHERE gtel.glpi_ticket_cache_id = gtc.id
+                      AND gtel.status = 'active'
+                ) AS email_count,
+                gtc.last_sync_at,
+                gtc.updated_at
+            FROM gestor_tickets.glpi_ticket_cache gtc
+            WHERE gtc.id = :ticket_cache_id
+              AND gtc.account_id = :account_id
+            LIMIT 1
+        """),
+        {
+            "account_id": account_id,
+            "ticket_cache_id": ticket_cache_id,
+        },
+    ).mappings().first()
+
+    if not ticket:
+        raise ValueError("El ticket GLPI cacheado no existe para esta cuenta.")
+
+    threads = db.execute(
+        text("""
+            SELECT
+                gttl.id AS link_id,
+                st.id AS thread_id,
+                st.title AS thread_title,
+                st.status::text AS thread_status,
+                gttl.origin::text AS origin,
+                gttl.created_at
+            FROM gestor_tickets.glpi_ticket_thread_links gttl
+            JOIN gestor_tickets.system_threads st
+              ON st.id = gttl.thread_id
+            WHERE gttl.glpi_ticket_cache_id = :ticket_cache_id
+              AND gttl.account_id = :account_id
+              AND gttl.status = 'active'
+            ORDER BY gttl.created_at DESC, gttl.id DESC
+        """),
+        {
+            "account_id": account_id,
+            "ticket_cache_id": ticket_cache_id,
+        },
+    ).mappings().all()
+
+    emails = db.execute(
+        text("""
+            SELECT
+                gtel.id AS link_id,
+                em.id AS email_message_id,
+                em.subject,
+                em.from_email,
+                em.sent_at,
+                gtel.origin::text AS origin,
+                gtel.created_at
+            FROM gestor_tickets.glpi_ticket_email_links gtel
+            JOIN gestor_tickets.email_messages em
+              ON em.id = gtel.email_message_id
+            WHERE gtel.glpi_ticket_cache_id = :ticket_cache_id
+              AND gtel.account_id = :account_id
+              AND gtel.status = 'active'
+            ORDER BY coalesce(em.sent_at, gtel.created_at) ASC, gtel.id ASC
+        """),
+        {
+            "account_id": account_id,
+            "ticket_cache_id": ticket_cache_id,
+        },
+    ).mappings().all()
+
+    return dict(ticket), [dict(row) for row in threads], [dict(row) for row in emails]

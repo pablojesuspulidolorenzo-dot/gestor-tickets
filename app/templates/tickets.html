@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Tickets GLPI - Gestor Tickets{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
+
+    <nav class="top-nav">
+        <a href="/app" class="nav-btn">Panel</a>
+        <a href="/mailbox" class="nav-btn">Bandeja</a>
+        <a href="/threads" class="nav-btn">Hilos</a>
+        <a href="/tickets" class="nav-btn active">Tickets GLPI</a>
+        <a href="/accounts" class="nav-btn">Cuentas</a>
+        <a href="/settings" class="nav-btn">Configuración</a>
+    </nav>
+
+    <div class="system-status">
+        <span class="version-text">{{ version.full }}</span>
+        <form method="post" action="/logout">
+            <button class="logout-button">Salir</button>
+        </form>
+    </div>
+</header>
+
+<main class="app-container">
+    <section class="thread-list-panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Tickets GLPI cacheados</h2>
+        </div>
+
+        <div class="message-scroll-area">
+            {% if tickets %}
+                {% for ticket in tickets %}
+                <a class="message-item mailbox-message-link" href="/tickets/{{ ticket.id }}">
+                    <div class="message-meta">
+                        <span class="message-sender">Ticket GLPI #{{ ticket.glpi_ticket_id }}</span>
+                        <span>Estado {{ ticket.status or "?" }}</span>
+                    </div>
+                    <div class="message-subject">{{ ticket.title or "(Sin título)" }}</div>
+                    <div class="message-snippet">
+                        {{ ticket.thread_count }} hilo(s) · {{ ticket.email_count }} correo(s)
+                    </div>
+                    <div class="message-snippet">
+                        Prioridad {{ ticket.priority or "?" }} · Urgencia {{ ticket.urgency or "?" }} · Impacto {{ ticket.impact or "?" }}
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <article class="message-item active">
+                    <div class="message-subject">No hay tickets GLPI cacheados</div>
+                    <div class="message-snippet">
+                        Crea un ticket desde el detalle de un hilo operativo.
+                    </div>
+                </article>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="reading-ai-panel">
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">🎫</div>
+            <h2 style="margin: 0 0 8px;">Tickets GLPI relacionados</h2>
+            <p class="pane-empty-text">
+                Esta vista muestra los tickets GLPI cacheados en gestor-tickets y sus relaciones internas.
+            </p>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">Cuenta</div>
+                    <div class="info-value">{{ user.account_email }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Tickets cacheados</div>
+                    <div class="info-value">{{ tickets|length }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Origen</div>
+                    <div class="info-value">GLPI API + caché local</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Versión</div>
+                    <div class="info-value">{{ version.full }}</div>
+                </div>
+            </div>
+        </div>
+    </section>
+</main>
+{% endblock %}

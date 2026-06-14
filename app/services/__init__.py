@@ -12,6 +12,8 @@ from app.services.email_archive_service import archive_message_from_imap_readonl
 from app.services.glpi_service import GlpiService, glpi_service
 from app.services.glpi_ticket_service import (
     create_glpi_ticket_from_thread,
+    get_glpi_ticket_detail,
+    list_glpi_ticket_cache,
     list_glpi_tickets_for_thread,
 )
 from app.services.mailbox_preview_service import (
@@ -36,7 +38,9 @@ __all__ = [
     "fetch_message_detail_readonly",
     "get_active_thread_for_email",
     "glpi_service",
+    "get_glpi_ticket_detail",
     "list_collaborative_accounts",
+    "list_glpi_ticket_cache",
     "list_collaborative_imap_folders",
     "list_system_threads",
     "list_glpi_tickets_for_thread",

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket GLPI #{{ ticket.glpi_ticket_id }} - Gestor Tickets{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
+
+    <nav class="top-nav">
+        <a href="/app" class="nav-btn">Panel</a>
+        <a href="/mailbox" class="nav-btn">Bandeja</a>
+        <a href="/threads" class="nav-btn">Hilos</a>
+        <a href="/tickets" class="nav-btn active">Tickets GLPI</a>
+        <a href="/accounts" class="nav-btn">Cuentas</a>
+        <a href="/settings" class="nav-btn">Configuración</a>
+    </nav>
+
+    <div class="system-status">
+        <span class="version-text">{{ version.full }}</span>
+        <form method="post" action="/logout">
+            <button class="logout-button">Salir</button>
+        </form>
+    </div>
+</header>
+
+<main class="app-container">
+    <section class="thread-list-panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Ticket GLPI #{{ ticket.glpi_ticket_id }}</h2>
+        </div>
+
+        <div class="message-scroll-area">
+            <a href="/tickets" class="nav-btn" style="margin-bottom: 14px;">← Volver a tickets</a>
+
+            <article class="message-item active">
+                <div class="message-meta">
+                    <span class="message-sender">GLPI #{{ ticket.glpi_ticket_id }}</span>
+                    <span>Estado {{ ticket.status or "?" }}</span>
+                </div>
+                <div class="message-subject">{{ ticket.title or "(Sin título)" }}</div>
+                <div class="message-snippet">
+                    Prioridad {{ ticket.priority or "?" }} · Urgencia {{ ticket.urgency or "?" }} · Impacto {{ ticket.impact or "?" }}
+                </div>
+            </article>
+
+            {% for thread in threads %}
+            <a class="message-item mailbox-message-link" href="/threads/{{ thread.thread_id }}">
+                <div class="message-meta">
+                    <span class="message-sender">Hilo #{{ thread.thread_id }}</span>
+                    <span>{{ thread.thread_status or "" }}</span>
+                </div>
+                <div class="message-subject">{{ thread.thread_title or "(Sin asunto)" }}</div>
+                <div class="message-snippet">Origen: {{ thread.origin or "No disponible" }}</div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="reading-ai-panel">
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">🎫</div>
+            <h2 style="margin: 0 0 8px;">{{ ticket.title or "Ticket GLPI" }}</h2>
+            <p class="pane-empty-text">
+                Detalle cacheado del ticket y relaciones internas con hilos y correos archivados.
+            </p>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">Ticket GLPI</div>
+                    <div class="info-value">#{{ ticket.glpi_ticket_id }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Hilos vinculados</div>
+                    <div class="info-value">{{ threads|length }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Correos vinculados</div>
+                    <div class="info-value">{{ emails|length }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Última sincronización</div>
+                    <div class="info-value">{{ ticket.last_sync_at or "No disponible" }}</div>
+                </div>
+            </div>
+
+            {% if emails %}
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Correos vinculados</h3>
+                {% for email in emails %}
+                <div class="timeline-item">
+                    <div class="timeline-title">{{ email.subject or "(Sin asunto)" }}</div>
+                    <div class="timeline-meta">
+                        {{ email.sent_at or "Sin fecha" }} · {{ email.from_email or "Sin remitente" }}
+                    </div>
+                    <p class="pane-empty-text">
+                        email_messages.id={{ email.email_message_id }} · origen: {{ email.origin or "No disponible" }}
+                    </p>
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+        </div>
+    </section>
+</main>
+{% endblock %}
