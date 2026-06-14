@@ -494,6 +494,167 @@ def _mark_duplicate_seen(
     db.commit()
 
 
+def _active_glpi_ticket_for_thread(
+    db: Session,
+    *,
+    account_id: int,
+    thread_id: int,
+) -> dict | None:
+    row = db.execute(
+        text("""
+            SELECT
+                gtc.id,
+                gtc.glpi_instance_id,
+                gtc.glpi_ticket_id,
+                gtc.title
+            FROM gestor_tickets.glpi_ticket_thread_links gttl
+            JOIN gestor_tickets.glpi_ticket_cache gtc
+              ON gtc.id = gttl.glpi_ticket_cache_id
+            WHERE gttl.account_id = :account_id
+              AND gttl.thread_id = :thread_id
+              AND gttl.status = 'active'
+            ORDER BY gttl.id DESC
+            LIMIT 1
+        """),
+        {
+            "account_id": account_id,
+            "thread_id": thread_id,
+        },
+    ).mappings().first()
+
+    return dict(row) if row else None
+
+
+def _auto_sync_ingested_email_to_ticket(
+    db: Session,
+    *,
+    account_id: int,
+    ticket: dict,
+    thread_id: int,
+    email_message_id: int,
+    user_id: int | None,
+) -> dict:
+    ticket_cache_id = int(ticket["id"])
+
+    link_created = db.execute(
+        text("""
+            INSERT INTO gestor_tickets.glpi_ticket_email_links (
+                account_id,
+                glpi_ticket_cache_id,
+                email_message_id,
+                origin,
+                status,
+                created_by_user_id,
+                notes
+            )
+            SELECT
+                :account_id,
+                :ticket_cache_id,
+                :email_message_id,
+                'auto_sync',
+                'active',
+                :user_id,
+                'Correo vinculado automáticamente por ingesta IMAP.'
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM gestor_tickets.glpi_ticket_email_links
+                WHERE glpi_ticket_cache_id = :ticket_cache_id
+                  AND email_message_id = :email_message_id
+                  AND status = 'active'
+            )
+            RETURNING id
+        """),
+        {
+            "account_id": account_id,
+            "ticket_cache_id": ticket_cache_id,
+            "email_message_id": email_message_id,
+            "user_id": user_id,
+        },
+    ).scalar_one_or_none()
+
+    operation_exists = db.execute(
+        text("""
+            SELECT id
+            FROM gestor_tickets.glpi_api_operations
+            WHERE glpi_ticket_cache_id = :ticket_cache_id
+              AND operation_type = 'auto_sync_ingested_email'
+              AND request_payload_json->>'email_message_id' = :email_message_id
+              AND success = true
+            LIMIT 1
+        """),
+        {
+            "ticket_cache_id": ticket_cache_id,
+            "email_message_id": str(email_message_id),
+        },
+    ).scalar_one_or_none()
+
+    operation_created = False
+    if not operation_exists:
+        db.execute(
+            text("""
+                INSERT INTO gestor_tickets.glpi_api_operations (
+                    account_id,
+                    glpi_instance_id,
+                    glpi_ticket_cache_id,
+                    operation_type,
+                    requested_by_user_id,
+                    request_payload_json,
+                    response_status_code,
+                    response_json,
+                    success,
+                    error_message
+                )
+                VALUES (
+                    :account_id,
+                    :glpi_instance_id,
+                    :ticket_cache_id,
+                    'auto_sync_ingested_email',
+                    :user_id,
+                    CAST(:request_payload_json AS jsonb),
+                    NULL,
+                    CAST(:response_json AS jsonb),
+                    true,
+                    NULL
+                )
+            """),
+            {
+                "account_id": account_id,
+                "glpi_instance_id": ticket.get("glpi_instance_id"),
+                "ticket_cache_id": ticket_cache_id,
+                "user_id": user_id,
+                "request_payload_json": json.dumps(
+                    {
+                        "thread_id": thread_id,
+                        "email_message_id": email_message_id,
+                        "source": "mail_ingestion",
+                    },
+                    ensure_ascii=False,
+                ),
+                "response_json": json.dumps(
+                    {
+                        "local_link_created": bool(link_created),
+                        "external_followup_created": False,
+                        "external_eml_attached": False,
+                        "reason": "No hay credencial GLPI operacional configurada para ejecución automática.",
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        )
+        operation_created = True
+
+    db.commit()
+
+    return {
+        "ticket_cache_id": ticket_cache_id,
+        "glpi_ticket_id": ticket.get("glpi_ticket_id"),
+        "email_link_created": bool(link_created),
+        "operation_created": operation_created,
+        "external_followup_created": False,
+        "external_eml_attached": False,
+    }
+
+
 def _extract_result_value(result: Any, key: str) -> Any:
     if isinstance(result, dict):
         return result.get(key)
@@ -684,14 +845,35 @@ def run_mail_ingestion_job(
                     )
                     db.commit()
 
+                thread_info = None
+                ticket_sync = None
                 if email_message_id:
-                    create_thread_from_email(
+                    thread, thread_changed = create_thread_from_email(
                         db,
                         account_id=account_id,
                         email_message_id=int(email_message_id),
                         created_by_user_id=user_id,
                         reason="Creación automática por ingesta programada IMAP.",
                     )
+                    thread_info = {
+                        "thread_id": thread.get("id"),
+                        "thread_changed": thread_changed,
+                    }
+
+                    ticket = _active_glpi_ticket_for_thread(
+                        db,
+                        account_id=account_id,
+                        thread_id=int(thread["id"]),
+                    )
+                    if ticket:
+                        ticket_sync = _auto_sync_ingested_email_to_ticket(
+                            db,
+                            account_id=account_id,
+                            ticket=ticket,
+                            thread_id=int(thread["id"]),
+                            email_message_id=int(email_message_id),
+                            user_id=user_id,
+                        )
 
                 imported_count += 1
                 imported.append(
@@ -700,6 +882,8 @@ def run_mail_ingestion_job(
                         "uid": uid,
                         "email_message_id": email_message_id,
                         "occurrence_id": occurrence_id,
+                        "thread": thread_info,
+                        "ticket_sync": ticket_sync,
                     }
                 )
 

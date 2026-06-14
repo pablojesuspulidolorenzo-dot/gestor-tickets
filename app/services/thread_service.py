@@ -118,6 +118,155 @@ def get_active_thread_for_email(db: Session, *, email_message_id: int) -> dict |
     return _row_to_dict(row)
 
 
+def get_active_thread_for_subject(
+    db: Session,
+    *,
+    account_id: int,
+    subject_normalized: str | None,
+) -> dict | None:
+    if not subject_normalized:
+        return None
+
+    row = db.execute(
+        text("""
+            SELECT
+                st.id,
+                st.system_thread_uid::text AS system_thread_uid,
+                st.account_id,
+                st.title,
+                st.subject_normalized,
+                st.status::text AS status,
+                count(etm_all.id)::int AS message_count,
+                max(em_all.sent_at) AS last_message_at,
+                st.updated_at
+            FROM gestor_tickets.system_threads st
+            LEFT JOIN gestor_tickets.email_thread_members etm_all
+              ON etm_all.thread_id = st.id
+             AND etm_all.status = 'active'
+            LEFT JOIN gestor_tickets.email_messages em_all
+              ON em_all.id = etm_all.email_message_id
+            WHERE st.account_id = :account_id
+              AND st.subject_normalized = :subject_normalized
+              AND st.status = 'active'
+            GROUP BY st.id
+            ORDER BY coalesce(max(em_all.sent_at), st.updated_at) DESC, st.id DESC
+            LIMIT 1
+        """),
+        {
+            "account_id": account_id,
+            "subject_normalized": subject_normalized,
+        },
+    ).mappings().first()
+
+    return _row_to_dict(row)
+
+
+def add_email_to_thread(
+    db: Session,
+    *,
+    account_id: int,
+    thread_id: int,
+    email_message_id: int,
+    user_id: int | None,
+    reason: str,
+) -> tuple[dict, bool]:
+    email_message = _get_email_message(
+        db,
+        account_id=account_id,
+        email_message_id=email_message_id,
+    )
+
+    existing = get_active_thread_for_email(db, email_message_id=email_message_id)
+    if existing:
+        return existing, False
+
+    db.execute(
+        text("""
+            INSERT INTO gestor_tickets.email_thread_members (
+                thread_id,
+                email_message_id,
+                position_asc,
+                added_by_user_id,
+                added_reason
+            )
+            SELECT
+                :thread_id,
+                :email_message_id,
+                coalesce(max(position_asc), -1) + 1,
+                :added_by_user_id,
+                :added_reason
+            FROM gestor_tickets.email_thread_members
+            WHERE thread_id = :thread_id
+            ON CONFLICT DO NOTHING
+        """),
+        {
+            "thread_id": thread_id,
+            "email_message_id": email_message_id,
+            "added_by_user_id": user_id,
+            "added_reason": reason,
+        },
+    )
+
+    db.execute(
+        text("""
+            UPDATE gestor_tickets.system_threads
+            SET updated_at = now()
+            WHERE id = :thread_id
+              AND account_id = :account_id
+        """),
+        {
+            "thread_id": thread_id,
+            "account_id": account_id,
+        },
+    )
+
+    db.execute(
+        text("""
+            INSERT INTO gestor_tickets.thread_operations (
+                account_id,
+                operation_type,
+                target_thread_id,
+                email_message_id,
+                performed_by_user_id,
+                reason,
+                details_json
+            )
+            VALUES (
+                :account_id,
+                'add_email',
+                :target_thread_id,
+                :email_message_id,
+                :performed_by_user_id,
+                :reason,
+                CAST(:details_json AS jsonb)
+            )
+        """),
+        {
+            "account_id": account_id,
+            "target_thread_id": thread_id,
+            "email_message_id": email_message_id,
+            "performed_by_user_id": user_id,
+            "reason": reason,
+            "details_json": json.dumps(
+                {
+                    "source": "mail_ingestion",
+                    "email_message_id": email_message_id,
+                    "subject": email_message.get("subject"),
+                },
+                ensure_ascii=False,
+            ),
+        },
+    )
+
+    db.commit()
+
+    thread = get_thread_summary(db, thread_id=thread_id)
+    if not thread:
+        raise ValueError("No se pudo recuperar el hilo actualizado.")
+
+    return thread, True
+
+
 def _get_email_message(db: Session, *, account_id: int, email_message_id: int) -> dict:
     row = db.execute(
         text("""
@@ -169,6 +318,21 @@ def create_thread_from_email(
         _clean_text(email_message.get("subject_normalized"))
         or normalize_subject(title)
     )
+
+    matching_thread = get_active_thread_for_subject(
+        db,
+        account_id=account_id,
+        subject_normalized=subject_normalized,
+    )
+    if matching_thread:
+        return add_email_to_thread(
+            db,
+            account_id=account_id,
+            thread_id=int(matching_thread["id"]),
+            email_message_id=email_message_id,
+            user_id=created_by_user_id,
+            reason=reason,
+        )
 
     thread_id = db.execute(
         text("""
