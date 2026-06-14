@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -610,6 +612,47 @@ def ticket_attach_email_web(
 
 
 
+def _pretty_json(value) -> str:
+    return json.dumps(value or {}, ensure_ascii=False, indent=2, default=str)
+
+
+def _get_ingestion_run_for_account(db: Session, *, account_id: int, run_id: int) -> dict | None:
+    row = db.execute(
+        text("""
+            SELECT
+                id,
+                job_id,
+                account_id,
+                status::text AS status,
+                started_at,
+                finished_at,
+                scanned_inbox_count,
+                scanned_sent_count,
+                imported_count,
+                duplicate_count,
+                error_count,
+                error_message,
+                details_json
+            FROM gestor_tickets.mail_ingestion_runs
+            WHERE account_id = :account_id
+              AND id = :run_id
+            LIMIT 1
+        """),
+        {
+            "account_id": account_id,
+            "run_id": run_id,
+        },
+    ).mappings().first()
+
+    if not row:
+        return None
+
+    item = dict(row)
+    item["details_json"] = item.get("details_json") or {}
+    item["details_json_pretty"] = _pretty_json(item["details_json"])
+    return item
+
+
 def _get_ingestion_runs_for_account(db: Session, *, account_id: int) -> list[dict]:
     rows = db.execute(
         text("""
@@ -662,6 +705,43 @@ def ingestion_page(
             "scheduler": scheduler,
             "job": job,
             "runs": runs,
+        },
+    )
+
+
+@router.get("/ingestion/runs/{run_id}", response_class=HTMLResponse)
+def ingestion_run_detail_page(
+    request: Request,
+    run_id: int,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    account_id = int(user["account_id"])
+    run = _get_ingestion_run_for_account(db, account_id=account_id, run_id=run_id)
+    if not run:
+        return RedirectResponse(url="/ingestion", status_code=303)
+
+    details = run["details_json"]
+    safety = details.get("safety") if isinstance(details, dict) else {}
+    if not isinstance(safety, dict):
+        safety = {}
+
+    return templates.TemplateResponse(
+        request,
+        "ingestion_run_detail.html",
+        {
+            "user": user,
+            "version": get_version_metadata(),
+            "run": run,
+            "details": details,
+            "mailboxes": details.get("mailboxes", []) if isinstance(details, dict) else [],
+            "imported": details.get("imported", []) if isinstance(details, dict) else [],
+            "duplicates": details.get("duplicates", []) if isinstance(details, dict) else [],
+            "errors": details.get("errors", []) if isinstance(details, dict) else [],
+            "safety": safety,
         },
     )
 

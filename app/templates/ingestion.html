@@ -228,7 +228,7 @@
             <section class="email-body-card">
                 <h3 style="margin-top: 0;">Últimas ejecuciones</h3>
                 {% for run in runs %}
-                <div class="timeline-item">
+                <a class="timeline-item mailbox-message-link" href="/ingestion/runs/{{ run.id }}">
                     <div class="timeline-title">
                         Run #{{ run.id }} · {{ run.status }}
                     </div>
@@ -242,7 +242,7 @@
                     {% if run.error_message %}
                     <p class="pane-empty-text">{{ run.error_message }}</p>
                     {% endif %}
-                </div>
+                </a>
                 {% endfor %}
             </section>
             {% endif %}
