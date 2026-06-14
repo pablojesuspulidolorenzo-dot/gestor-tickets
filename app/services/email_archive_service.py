@@ -254,7 +254,8 @@ def _parsed_datetime(value: str | None):
 
 def _archive_path(account: CollaborativeAccount, mailbox: str, uidvalidity: str | None, uid: str, eml_sha256: str) -> tuple[str, str]:
     mailbox_part = _safe_path_part(mailbox)
-    uidvalidity_part = _safe_path_part(uidvalidity or "unknown_uidvalidity")
+    uidvalidity = _clean_text(uidvalidity) or "unknown_uidvalidity"
+    uidvalidity_part = _safe_path_part(uidvalidity)
     filename = f"{uid}_{eml_sha256[:16]}.eml"
 
     root = Path(settings.MAIL_ARCHIVE_ROOT)
@@ -549,6 +550,7 @@ def archive_message_from_imap_readonly(
             raise ValueError(f"No se pudo abrir el buzón en solo lectura: {select_data!r}")
 
         uidvalidity = _get_uidvalidity(connection)
+        uidvalidity = _clean_text(uidvalidity) or "unknown_uidvalidity"
 
         fetch_status, fetch_data = connection.uid(
             "FETCH",
