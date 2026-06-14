@@ -79,3 +79,22 @@ class MailboxMessageDetailResponse(BaseModel):
     blocked_active_content: bool
     readonly_mode: bool
     safety_notes: list[str]
+
+
+class ArchivedEmailResponse(BaseModel):
+    ok: bool
+    account_id: int
+    account_email: str
+    email_message_id: int
+    occurrence_id: int
+    mailbox: str
+    uid: str
+    message_id: str | None
+    subject: str | None
+    eml_storage_path: str
+    eml_sha256: str
+    size_bytes: int
+    seen_before: bool
+    seen_after: bool
+    safety_notes: list[str]
+    message: str

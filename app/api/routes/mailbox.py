@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.schemas.mailbox import (
+    ArchivedEmailResponse,
     ImapFolderInfo,
     MailboxFoldersResponse,
     MailboxMessageDetailResponse,
@@ -20,6 +21,10 @@ from app.services.mailbox_preview_service import (
 from app.services.message_detail_service import (
     MESSAGE_DETAIL_SAFETY_NOTES,
     fetch_message_detail_readonly,
+)
+from app.services.email_archive_service import (
+    ARCHIVE_SAFETY_NOTES,
+    archive_message_from_imap_readonly,
 )
 
 router = APIRouter(tags=["mailbox"])
@@ -132,6 +137,45 @@ def preview_unified_mailbox(
             returned_messages=len(preview.messages),
             messages=[_message_schema(item) for item in preview.messages],
             safety_notes=SAFETY_NOTES,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+
+@router.post("/message/archive", response_model=ArchivedEmailResponse)
+def archive_message(
+    account_id: int,
+    mailbox: str,
+    uid: str,
+    db: Session = Depends(get_db),
+):
+    try:
+        result = archive_message_from_imap_readonly(
+            db,
+            account_id=account_id,
+            mailbox=mailbox,
+            uid=uid,
+        )
+
+        return ArchivedEmailResponse(
+            ok=result.ok,
+            account_id=result.account.id,
+            account_email=result.account.email,
+            email_message_id=result.email_message_id,
+            occurrence_id=result.occurrence_id,
+            mailbox=result.mailbox,
+            uid=result.uid,
+            message_id=result.message_id,
+            subject=result.subject,
+            eml_storage_path=result.eml_storage_path,
+            eml_sha256=result.eml_sha256,
+            size_bytes=result.size_bytes,
+            seen_before=result.seen_before,
+            seen_after=result.seen_after,
+            safety_notes=ARCHIVE_SAFETY_NOTES,
+            message=result.message,
         )
 
     except ValueError as exc:

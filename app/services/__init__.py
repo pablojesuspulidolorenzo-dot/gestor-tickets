@@ -8,6 +8,7 @@ from app.services.collaborative_imap_service import (
     test_imap_connection_readonly,
     test_stored_collaborative_account_imap,
 )
+from app.services.email_archive_service import archive_message_from_imap_readonly
 from app.services.glpi_service import GlpiService, glpi_service
 from app.services.mailbox_preview_service import (
     list_collaborative_imap_folders,
@@ -18,6 +19,7 @@ from app.services.message_detail_service import fetch_message_detail_readonly
 
 __all__ = [
     "GlpiService",
+    "archive_message_from_imap_readonly",
     "configure_collaborative_account_imap",
     "create_audit_log",
     "fetch_message_detail_readonly",
