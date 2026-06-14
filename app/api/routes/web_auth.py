@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.core.db import get_db
 from app.core.versioning import get_version_metadata
 from app.services.mailbox_preview_service import SAFETY_NOTES, preview_unified_collaborative_mailbox
+from app.services.message_detail_service import MESSAGE_DETAIL_SAFETY_NOTES, fetch_message_detail_readonly
 from app.services.session_auth_service import authenticate_session_user
 
 router = APIRouter()
@@ -217,6 +218,66 @@ def mailbox_page(
             active_section="mailbox",
             preview=preview,
             safety_notes=SAFETY_NOTES,
+        ),
+    )
+
+
+
+@router.get("/mailbox/message", response_class=HTMLResponse)
+def mailbox_message_page(
+    request: Request,
+    mailbox: str,
+    uid: str,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        detail = fetch_message_detail_readonly(
+            db,
+            account_id=int(user["account_id"]),
+            mailbox=mailbox,
+            uid=uid,
+        )
+        error = None
+    except ValueError as exc:
+        detail = None
+        error = str(exc)
+
+    if error:
+        return templates.TemplateResponse(
+            request=request,
+            name="section_page.html",
+            context=_template_context(
+                request,
+                user=user,
+                active_section="mailbox",
+                section_key="mailbox",
+                section={
+                    "title": "Bandeja",
+                    "icon": "📥",
+                    "description": error,
+                    "next_steps": [
+                        "Volver a la bandeja y seleccionar otro mensaje.",
+                        "Comprobar que el UID sigue existiendo en el buzón.",
+                        "Mantener siempre lectura en modo readonly.",
+                    ],
+                },
+            ),
+            status_code=400,
+        )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="message_detail.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="mailbox",
+            message=detail,
+            safety_notes=MESSAGE_DETAIL_SAFETY_NOTES,
         ),
     )
 

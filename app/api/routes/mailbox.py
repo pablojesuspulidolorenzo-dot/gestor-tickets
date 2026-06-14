@@ -5,6 +5,7 @@ from app.core.db import get_db
 from app.schemas.mailbox import (
     ImapFolderInfo,
     MailboxFoldersResponse,
+    MailboxMessageDetailResponse,
     MailboxPreviewMessage,
     MailboxPreviewResponse,
     UnifiedMailboxPreviewResponse,
@@ -15,6 +16,10 @@ from app.services.mailbox_preview_service import (
     list_collaborative_imap_folders,
     preview_collaborative_mailbox,
     preview_unified_collaborative_mailbox,
+)
+from app.services.message_detail_service import (
+    MESSAGE_DETAIL_SAFETY_NOTES,
+    fetch_message_detail_readonly,
 )
 
 router = APIRouter(tags=["mailbox"])
@@ -127,6 +132,47 @@ def preview_unified_mailbox(
             returned_messages=len(preview.messages),
             messages=[_message_schema(item) for item in preview.messages],
             safety_notes=SAFETY_NOTES,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/message", response_model=MailboxMessageDetailResponse)
+def message_detail(
+    account_id: int,
+    mailbox: str,
+    uid: str,
+    db: Session = Depends(get_db),
+):
+    try:
+        detail = fetch_message_detail_readonly(
+            db,
+            account_id=account_id,
+            mailbox=mailbox,
+            uid=uid,
+        )
+
+        return MailboxMessageDetailResponse(
+            ok=detail.ok,
+            account_id=detail.account.id,
+            account_email=detail.account.email,
+            mailbox=detail.mailbox,
+            uid=detail.uid,
+            message_id=detail.message_id,
+            subject=detail.subject,
+            from_=detail.from_,
+            to=detail.to,
+            cc=detail.cc,
+            date=detail.date,
+            flags=detail.flags,
+            seen=detail.seen,
+            answered=detail.answered,
+            text_body=detail.text_body,
+            sanitized_html_body=detail.sanitized_html_body,
+            blocked_active_content=detail.blocked_active_content,
+            readonly_mode=True,
+            safety_notes=MESSAGE_DETAIL_SAFETY_NOTES,
         )
 
     except ValueError as exc:

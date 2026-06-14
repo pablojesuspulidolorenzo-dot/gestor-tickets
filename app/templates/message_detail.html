@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Correo - Gestor Tickets{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
+
+    <nav class="top-nav">
+        <a href="/app" class="nav-btn">Panel</a>
+        <a href="/mailbox" class="nav-btn active">Bandeja</a>
+        <a href="/threads" class="nav-btn">Hilos</a>
+        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
+        <a href="/accounts" class="nav-btn">Cuentas</a>
+        <a href="/settings" class="nav-btn">Configuración</a>
+    </nav>
+
+    <div class="system-status">
+        <span class="version-text">{{ version.full }}</span>
+        <form method="post" action="/logout">
+            <button class="logout-button">Salir</button>
+        </form>
+    </div>
+</header>
+
+<main class="app-container">
+    <section class="thread-list-panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Detalle del correo</h2>
+        </div>
+
+        <div class="message-scroll-area">
+            <a href="/mailbox" class="nav-btn" style="margin-bottom: 14px;">← Volver a bandeja</a>
+
+            <article class="message-item active">
+                <div class="message-meta">
+                    <span class="message-sender">{{ message.mailbox }}</span>
+                    <span>UID {{ message.uid }}</span>
+                </div>
+                <div class="message-subject">{{ message.subject }}</div>
+                <div class="message-snippet">De: {{ message.from_ }}</div>
+                {% if message.to %}
+                <div class="message-snippet">Para: {{ message.to }}</div>
+                {% endif %}
+                {% if message.cc %}
+                <div class="message-snippet">CC: {{ message.cc }}</div>
+                {% endif %}
+                <div class="message-snippet">Fecha: {{ message.date or "Sin fecha" }}</div>
+                <div class="message-snippet">
+                    Estado:
+                    {% if message.seen %}
+                        leído
+                    {% else %}
+                        no leído
+                    {% endif %}
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="reading-ai-panel">
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">✉️</div>
+            <h2 style="margin: 0 0 8px;">{{ message.subject }}</h2>
+            <p class="pane-empty-text">
+                Mensaje abierto en modo seguro con BODY.PEEK[]. No se ha marcado como leído.
+            </p>
+
+            {% if message.blocked_active_content %}
+            <div class="scheduled-alert scheduled-alert-error" style="margin: 18px 0;">
+                Se ha bloqueado contenido activo o potencialmente peligroso del HTML del correo.
+            </div>
+            {% endif %}
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">Message-ID</div>
+                    <div class="info-value">{{ message.message_id or "No disponible" }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Flags</div>
+                    <div class="info-value">{{ message.flags|join(", ") if message.flags else "Sin flags" }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Modo</div>
+                    <div class="info-value">EXAMINE / BODY.PEEK[]</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">HTML activo bloqueado</div>
+                    <div class="info-value">{{ "Sí" if message.blocked_active_content else "No" }}</div>
+                </div>
+            </div>
+
+            <section class="email-body-card">
+                {% if message.sanitized_html_body %}
+                    <div class="email-html-body">
+                        {{ message.sanitized_html_body | safe }}
+                    </div>
+                {% elif message.text_body %}
+                    <pre class="email-text-body">{{ message.text_body }}</pre>
+                {% else %}
+                    <p class="pane-empty-text">El mensaje no contiene cuerpo de texto visible.</p>
+                {% endif %}
+            </section>
+
+            <pre class="code-box">{% for note in safety_notes %}- {{ note }}
+{% endfor %}</pre>
+        </div>
+    </section>
+</main>
+{% endblock %}

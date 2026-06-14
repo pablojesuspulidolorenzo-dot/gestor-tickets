@@ -35,7 +35,7 @@
         <div class="message-scroll-area">
             {% if preview.messages %}
                 {% for message in preview.messages %}
-                <article class="message-item">
+                <a class="message-item mailbox-message-link" href="/mailbox/message?mailbox={{ message.mailbox|urlencode }}&uid={{ message.uid|urlencode }}">
                     <div class="message-meta">
                         <span class="message-sender">
                             {% if message.direction == "sent" %}
@@ -64,7 +64,7 @@
                         Para: {{ message.to }}
                     </div>
                     {% endif %}
-                </article>
+                </a>
                 {% endfor %}
             {% else %}
                 <article class="message-item active">

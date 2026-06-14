@@ -57,3 +57,25 @@ class UnifiedMailboxPreviewResponse(BaseModel):
     returned_messages: int
     messages: list[MailboxPreviewMessage]
     safety_notes: list[str]
+
+
+class MailboxMessageDetailResponse(BaseModel):
+    ok: bool
+    account_id: int
+    account_email: str
+    mailbox: str
+    uid: str
+    message_id: str | None
+    subject: str
+    from_: str
+    to: str | None
+    cc: str | None
+    date: str | None
+    flags: list[str]
+    seen: bool
+    answered: bool
+    text_body: str | None
+    sanitized_html_body: str | None
+    blocked_active_content: bool
+    readonly_mode: bool
+    safety_notes: list[str]

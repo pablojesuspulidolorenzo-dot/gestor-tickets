@@ -14,11 +14,13 @@ from app.services.mailbox_preview_service import (
     preview_collaborative_mailbox,
     preview_unified_collaborative_mailbox,
 )
+from app.services.message_detail_service import fetch_message_detail_readonly
 
 __all__ = [
     "GlpiService",
     "configure_collaborative_account_imap",
     "create_audit_log",
+    "fetch_message_detail_readonly",
     "glpi_service",
     "list_collaborative_accounts",
     "list_collaborative_imap_folders",
