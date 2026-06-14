@@ -120,7 +120,7 @@
 
                     <label class="form-label">
                         API key
-                        <input class="form-input" type="password" name="api_key" autocomplete="new-password" placeholder="{% if form_endpoint and form_endpoint.api_key_masked %}{{ form_endpoint.api_key_masked }}{% else %}No configurada{% endif %}">
+                        <input class="form-input ai-api-key" type="password" name="api_key" autocomplete="new-password" placeholder="{% if form_endpoint and form_endpoint.api_key_masked %}{{ form_endpoint.api_key_masked }}{% else %}No configurada{% endif %}">
                         <small>Nunca se muestra ni guarda en claro. Deja vacío para conservar la existente.</small>
                     </label>
 
@@ -131,7 +131,7 @@
 
                     <label class="form-label">
                         Modelo detectado
-                        <select class="form-input ai-model-select" id="ai-model-select" name="default_model" size="8">
+                        <select class="form-input ai-model-select" id="ai-model-select" name="default_model" size="8" data-selected-model="{{ form_endpoint.default_model or '' if form_endpoint else '' }}">
                             {% for model in models %}
                             <option value="{{ model.model_id }}"
                                     data-owned-by="{{ model.owned_by or '' }}"
@@ -197,6 +197,12 @@
                         <textarea class="form-input" name="retry_policy_json" rows="4">{{ (form_endpoint.retry_policy_json if form_endpoint else {"max_retries":1,"retry_on":["timeout","connection_error","rate_limited"],"do_not_retry_on":["auth_error","quota_exceeded","model_not_found","invalid_request"]}) | tojson }}</textarea>
                     </label>
 
+                    <div class="info-grid">
+                        <button class="primary-button ai-preview-models-button" type="button" data-endpoint-id="{{ form_endpoint.id if form_endpoint else '' }}" data-loading-text="Obteniendo modelos...">Obtener modelos</button>
+                        <button class="primary-button ai-preview-validate-button" type="button" data-endpoint-id="{{ form_endpoint.id if form_endpoint else '' }}" data-loading-text="Validando...">Validar modelo</button>
+                    </div>
+                    <p class="pane-empty-text ai-operation-result" role="status"></p>
+
                     <button class="primary-button" type="submit">Guardar endpoint</button>
                 </form>
             </section>
@@ -205,10 +211,10 @@
             <section class="email-body-card">
                 <h3 style="margin-top: 0;">Acciones técnicas</h3>
                 <div class="info-grid">
-                    <form method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/discover-models">
+                    <form class="ai-saved-discover-form" method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/discover-models">
                         <button class="primary-button" type="submit" data-loading-text="Obteniendo modelos...">Obtener modelos</button>
                     </form>
-                    <form method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/validate-model">
+                    <form class="ai-saved-validate-form" method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/validate-model">
                         <input class="ai-validate-model-id" type="hidden" name="model_id" value="{{ selected_endpoint.default_model or '' }}">
                         <button class="primary-button" type="submit" data-loading-text="Validando...">Validar modelo</button>
                     </form>

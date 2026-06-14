@@ -10,12 +10,14 @@ from app.schemas.ai_settings import (
     AiEndpointListResponse,
     AiEndpointResponse,
     AiEndpointUpdate,
+    AiEndpointPreviewRequest,
+    AiValidateModelPreviewRequest,
     AiModelListResponse,
     AiOperationResponse,
     AiValidateModelRequest,
     AiValidationResponse,
 )
-from app.services.ai_model_discovery_service import discover_models, validate_model
+from app.services.ai_model_discovery_service import discover_models, discover_models_preview, validate_model, validate_model_preview
 from app.services.ai_settings_service import (
     create_endpoint,
     get_endpoint,
@@ -108,5 +110,22 @@ def api_discover_models(endpoint_id: int, db: Session = Depends(get_db)):
 def api_validate_model(endpoint_id: int, payload: AiValidateModelRequest, db: Session = Depends(get_db)):
     try:
         return AiValidationResponse(**validate_model(db, endpoint_id, payload.model_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/discover-models-preview", response_model=AiModelListResponse)
+def api_discover_models_preview(payload: AiEndpointPreviewRequest):
+    try:
+        models = discover_models_preview(payload.model_dump())
+        return AiModelListResponse(endpoint_id=0, models=models)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/validate-model-preview", response_model=AiValidationResponse)
+def api_validate_model_preview(payload: AiValidateModelPreviewRequest):
+    try:
+        return AiValidationResponse(**validate_model_preview(payload.model_dump(), payload.model_id))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

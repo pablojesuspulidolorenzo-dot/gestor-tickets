@@ -34,6 +34,14 @@ class AiEndpointUpdate(AiEndpointBase):
     keep_existing_api_key: bool = True
 
 
+class AiEndpointPreviewRequest(AiEndpointBase):
+    api_key: SecretStr
+
+
+class AiValidateModelPreviewRequest(AiEndpointPreviewRequest):
+    model_id: str | None = None
+
+
 class AiEndpointResponse(AiEndpointBase):
     id: int
     api_key_masked: str | None = None
@@ -47,8 +55,8 @@ class AiEndpointResponse(AiEndpointBase):
 
 
 class AiModelResponse(BaseModel):
-    id: int
-    endpoint_id: int
+    id: int | None = None
+    endpoint_id: int | None = None
     model_id: str
     display_name: str | None = None
     owned_by: str | None = None
@@ -58,7 +66,7 @@ class AiModelResponse(BaseModel):
     raw_json: dict[str, Any] = {}
     is_chat_capable: bool = True
     is_free_hint: bool = False
-    last_seen_at: str
+    last_seen_at: str | None = None
 
 
 class AiValidationResponse(BaseModel):

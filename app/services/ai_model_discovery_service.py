@@ -9,11 +9,41 @@ import httpx
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.services.ai_settings_service import get_endpoint_secret, list_models
+from app.services.ai_settings_service import get_endpoint_secret, list_models, _path, _sanitize_extra_headers
 
 
 def _join_url(base_url: str, path: str) -> str:
     return urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
+
+
+def _api_key_plain(value: Any) -> str:
+    if hasattr(value, "get_secret_value") and value:
+        return value.get_secret_value().strip()
+    return str(value or "").strip()
+
+
+def _preview_endpoint(payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    api_key = _api_key_plain(payload.get("api_key"))
+    if not api_key:
+        raise ValueError("Debes indicar una API key para esta prueba técnica.")
+
+    endpoint = {
+        "base_url": str(payload.get("base_url") or "").strip().rstrip("/"),
+        "models_endpoint_path": _path(payload.get("models_endpoint_path"), "/models"),
+        "chat_endpoint_path": _path(payload.get("chat_endpoint_path"), "/chat/completions"),
+        "timeout_seconds": int(payload.get("timeout_seconds") or 60),
+        "top_p": float(payload.get("top_p") if payload.get("top_p") is not None else 1.0),
+        "extra_headers_json": _sanitize_extra_headers(payload.get("extra_headers_json") or {}),
+        "default_model": str(payload.get("default_model") or "").strip() or None,
+    }
+    if not endpoint["base_url"]:
+        raise ValueError("Debes indicar la base URL del endpoint IA.")
+    return endpoint, api_key
+
+
+def _preview_models(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    return [{**model, "id": None, "endpoint_id": None, "last_seen_at": now} for model in models]
 
 
 def _classify_error(status_code: int | None, body: Any, message: str) -> str:
@@ -436,3 +466,115 @@ def _strict_json_ok(content: str) -> bool:
     except Exception:
         return False
     return parsed == {"ok": True}
+
+
+def discover_models_preview(payload: dict[str, Any]) -> list[dict]:
+    endpoint, api_key = _preview_endpoint(payload)
+    url = _join_url(endpoint["base_url"], endpoint["models_endpoint_path"])
+    headers = {"Authorization": f"Bearer {api_key}", **(endpoint.get("extra_headers_json") or {})}
+    start = time.monotonic()
+    try:
+        with httpx.Client(timeout=endpoint["timeout_seconds"]) as client:
+            response = client.get(url, headers=headers)
+        try:
+            response_json = response.json()
+        except Exception:
+            response_json = {"raw": response.text[:1200]}
+        if response.status_code >= 400:
+            error_type = _classify_error(response.status_code, response_json, response.text)
+            raise ValueError(error_type)
+        return _preview_models(_extract_models(response_json))
+    except httpx.TimeoutException:
+        raise ValueError("timeout")
+    except httpx.RequestError:
+        raise ValueError("connection_error")
+
+
+def validate_model_preview(payload: dict[str, Any], model_id: str | None = None) -> dict:
+    endpoint, api_key = _preview_endpoint(payload)
+    selected_model = (model_id or payload.get("model_id") or payload.get("default_model") or "").strip()
+    if not selected_model:
+        raise ValueError("Debes seleccionar un modelo.")
+
+    url = _join_url(endpoint["base_url"], endpoint["chat_endpoint_path"])
+    request_payload = {
+        "model": selected_model,
+        "messages": [
+            {"role": "system", "content": "Responde exclusivamente con JSON válido, sin markdown."},
+            {"role": "user", "content": 'Devuelve exactamente este JSON: {"ok":true}'},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 64,
+    }
+    if endpoint.get("top_p") is not None:
+        request_payload["top_p"] = endpoint["top_p"]
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **(endpoint.get("extra_headers_json") or {})}
+    start = time.monotonic()
+    try:
+        with httpx.Client(timeout=endpoint["timeout_seconds"]) as client:
+            response = client.post(url, headers=headers, json=request_payload)
+        latency_ms = int((time.monotonic() - start) * 1000)
+        try:
+            response_json = response.json()
+        except Exception:
+            response_json = {"raw": response.text[:1200]}
+
+        if response.status_code >= 400:
+            error_type = _classify_error(response.status_code, response_json, response.text)
+            return {
+                "ok": False,
+                "status": "error",
+                "error_type": error_type,
+                "error_message": f"Validación fallida: {error_type}",
+                "http_status": response.status_code,
+                "latency_ms": latency_ms,
+                "strict_json_ok": False,
+                "thinking_detected": False,
+                "response_text_preview": response.text[:1200],
+            }
+
+        content = _extract_chat_content(response_json)
+        thinking_detected = "<thought>" in content.lower() and "</thought>" in content.lower()
+        strict_json_ok = _strict_json_ok(content)
+        ok = strict_json_ok and not thinking_detected
+        error_type = None if ok else ("thinking_detected" if thinking_detected else "json_not_strict")
+        return {
+            "ok": ok,
+            "status": "ok" if ok else "partial",
+            "error_type": error_type,
+            "error_message": None if ok else (
+                "Modelo accesible, pero no devuelve JSON estricto porque incluye bloque thinking."
+                if thinking_detected else
+                "Modelo accesible, pero la respuesta no es JSON estricto."
+            ),
+            "http_status": response.status_code,
+            "latency_ms": latency_ms,
+            "strict_json_ok": strict_json_ok,
+            "thinking_detected": thinking_detected,
+            "response_text_preview": content[:1200],
+        }
+    except httpx.TimeoutException:
+        return {
+            "ok": False,
+            "status": "error",
+            "error_type": "timeout",
+            "error_message": "Validación fallida: timeout",
+            "http_status": None,
+            "latency_ms": int((time.monotonic() - start) * 1000),
+            "strict_json_ok": False,
+            "thinking_detected": False,
+            "response_text_preview": None,
+        }
+    except httpx.RequestError:
+        return {
+            "ok": False,
+            "status": "error",
+            "error_type": "connection_error",
+            "error_message": "Validación fallida: connection_error",
+            "http_status": None,
+            "latency_ms": int((time.monotonic() - start) * 1000),
+            "strict_json_ok": False,
+            "thinking_detected": False,
+            "response_text_preview": None,
+        }
