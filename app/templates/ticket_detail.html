@@ -64,7 +64,7 @@
             <div class="pane-empty-icon">🎫</div>
             <h2 style="margin: 0 0 8px;">{{ ticket.title or "Ticket GLPI" }}</h2>
             <p class="pane-empty-text">
-                Detalle cacheado del ticket y relaciones internas con hilos y correos archivados.
+                Detalle cacheado del ticket y relaciones internas con hilos, correos, adjuntos y operaciones GLPI.
             </p>
 
             <section class="email-body-card">
@@ -138,6 +138,21 @@
                     <p class="pane-empty-text">
                         email_messages.id={{ email.email_message_id }} · origen: {{ email.origin or "No disponible" }}
                     </p>
+
+                    {% if email.eml_attached %}
+                    <div class="scheduled-alert scheduled-alert-success" style="margin: 10px 0;">
+                        .eml ya adjuntado a GLPI
+                        {% if email.glpi_document_id %}
+                            · Document #{{ email.glpi_document_id }}
+                        {% endif %}
+                        {% if email.glpi_document_item_id %}
+                            · Document_Item #{{ email.glpi_document_item_id }}
+                        {% endif %}
+                        {% if email.eml_attachment_filename %}
+                            · {{ email.eml_attachment_filename }}
+                        {% endif %}
+                    </div>
+                    {% else %}
                     <form method="post" action="/tickets/{{ ticket.id }}/attach-email/{{ email.email_message_id }}" class="form-stack" style="margin-top: 12px;">
                         <label class="form-label">
                             Contraseña GLPI
@@ -147,6 +162,31 @@
                             Adjuntar .eml original al ticket
                         </button>
                     </form>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
+            {% if operations %}
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Histórico de operaciones GLPI</h3>
+                {% for op in operations %}
+                <div class="timeline-item">
+                    <div class="timeline-title">
+                        {{ op.operation_type }}
+                        {% if op.success %}
+                            · OK
+                        {% else %}
+                            · ERROR
+                        {% endif %}
+                    </div>
+                    <div class="timeline-meta">
+                        {{ op.created_at }} · HTTP {{ op.response_status_code or "N/D" }}
+                    </div>
+                    {% if op.error_message %}
+                    <p class="pane-empty-text">{{ op.error_message }}</p>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </section>

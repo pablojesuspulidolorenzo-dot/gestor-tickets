@@ -493,7 +493,7 @@ def ticket_detail_page(
         return user
 
     try:
-        ticket, threads, emails = get_glpi_ticket_detail(
+        ticket, threads, emails, operations = get_glpi_ticket_detail(
             db,
             account_id=int(user["account_id"]),
             ticket_cache_id=ticket_cache_id,
@@ -511,6 +511,7 @@ def ticket_detail_page(
             ticket=ticket,
             threads=threads,
             emails=emails,
+            operations=operations,
         ),
     )
 

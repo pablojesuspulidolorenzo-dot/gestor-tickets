@@ -58,6 +58,19 @@ class GlpiTicketLinkedEmail(BaseModel):
     sent_at: datetime | None
     origin: str | None
     created_at: datetime
+    eml_attached: bool = False
+    glpi_document_id: int | None = None
+    glpi_document_item_id: int | None = None
+    eml_attachment_filename: str | None = None
+
+
+class GlpiApiOperationItem(BaseModel):
+    id: int
+    operation_type: str
+    response_status_code: int | None
+    success: bool
+    error_message: str | None
+    created_at: datetime
 
 
 class GlpiTicketDetailResponse(BaseModel):
@@ -65,6 +78,7 @@ class GlpiTicketDetailResponse(BaseModel):
     ticket: GlpiTicketListItem
     threads: list[GlpiTicketLinkedThread]
     emails: list[GlpiTicketLinkedEmail]
+    operations: list[GlpiApiOperationItem]
 
 
 class GlpiTicketListResponse(BaseModel):

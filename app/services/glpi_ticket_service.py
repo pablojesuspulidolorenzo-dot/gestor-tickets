@@ -739,7 +739,7 @@ def get_glpi_ticket_detail(
     *,
     account_id: int,
     ticket_cache_id: int,
-) -> tuple[dict, list[dict], list[dict]]:
+) -> tuple[dict, list[dict], list[dict], list[dict]]:
     ticket = db.execute(
         text("""
             SELECT
@@ -812,10 +812,27 @@ def get_glpi_ticket_detail(
                 em.from_email,
                 em.sent_at,
                 gtel.origin::text AS origin,
-                gtel.created_at
+                gtel.created_at,
+                CASE WHEN attach.id IS NULL THEN false ELSE true END AS eml_attached,
+                NULLIF(attach.response_json->>'glpi_document_id', '')::bigint AS glpi_document_id,
+                NULLIF(attach.response_json->>'glpi_document_item_id', '')::bigint AS glpi_document_item_id,
+                attach.request_payload_json->>'filename' AS eml_attachment_filename
             FROM gestor_tickets.glpi_ticket_email_links gtel
             JOIN gestor_tickets.email_messages em
               ON em.id = gtel.email_message_id
+            LEFT JOIN LATERAL (
+                SELECT
+                    op.id,
+                    op.response_json,
+                    op.request_payload_json
+                FROM gestor_tickets.glpi_api_operations op
+                WHERE op.glpi_ticket_cache_id = gtel.glpi_ticket_cache_id
+                  AND op.operation_type = 'attach_email_eml'
+                  AND op.success = true
+                  AND op.request_payload_json->>'email_message_id' = em.id::text
+                ORDER BY op.id DESC
+                LIMIT 1
+            ) attach ON true
             WHERE gtel.glpi_ticket_cache_id = :ticket_cache_id
               AND gtel.account_id = :account_id
               AND gtel.status = 'active'
@@ -827,7 +844,33 @@ def get_glpi_ticket_detail(
         },
     ).mappings().all()
 
-    return dict(ticket), [dict(row) for row in threads], [dict(row) for row in emails]
+    operations = db.execute(
+        text("""
+            SELECT
+                id,
+                operation_type,
+                response_status_code,
+                success,
+                error_message,
+                created_at
+            FROM gestor_tickets.glpi_api_operations
+            WHERE account_id = :account_id
+              AND glpi_ticket_cache_id = :ticket_cache_id
+            ORDER BY id DESC
+            LIMIT 20
+        """),
+        {
+            "account_id": account_id,
+            "ticket_cache_id": ticket_cache_id,
+        },
+    ).mappings().all()
+
+    return (
+        dict(ticket),
+        [dict(row) for row in threads],
+        [dict(row) for row in emails],
+        [dict(row) for row in operations],
+    )
 
 
 def refresh_glpi_ticket_cache(

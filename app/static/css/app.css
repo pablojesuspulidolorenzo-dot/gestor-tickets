@@ -526,3 +526,13 @@ a {
     font-weight: 900;
     font-size: 0.84rem;
 }
+
+.operation-ok {
+    color: #166534;
+    font-weight: 900;
+}
+
+.operation-error {
+    color: #991b1b;
+    font-weight: 900;
+}

@@ -9,6 +9,7 @@ from app.schemas.glpi_tickets import (
     AttachEmailEmlResponse,
     CreateGlpiTicketFromThreadRequest,
     CreateGlpiTicketFromThreadResponse,
+    GlpiApiOperationItem,
     GlpiTicketCacheSummary,
     GlpiTicketDetailResponse,
     GlpiTicketLinkedEmail,
@@ -81,7 +82,7 @@ def ticket_detail(
     db: Session = Depends(get_db),
 ):
     try:
-        ticket, threads, emails = get_glpi_ticket_detail(
+        ticket, threads, emails, operations = get_glpi_ticket_detail(
             db,
             account_id=account_id,
             ticket_cache_id=ticket_cache_id,
@@ -110,8 +111,23 @@ def ticket_detail(
                     sent_at=item.get("sent_at"),
                     origin=item.get("origin"),
                     created_at=item["created_at"],
+                    eml_attached=bool(item.get("eml_attached")),
+                    glpi_document_id=item.get("glpi_document_id"),
+                    glpi_document_item_id=item.get("glpi_document_item_id"),
+                    eml_attachment_filename=item.get("eml_attachment_filename"),
                 )
                 for item in emails
+            ],
+            operations=[
+                GlpiApiOperationItem(
+                    id=item["id"],
+                    operation_type=item["operation_type"],
+                    response_status_code=item.get("response_status_code"),
+                    success=item["success"],
+                    error_message=item.get("error_message"),
+                    created_at=item["created_at"],
+                )
+                for item in operations
             ],
         )
 
