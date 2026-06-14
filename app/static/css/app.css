@@ -461,3 +461,23 @@ a {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color: #0f172a;
 }
+
+.scheduled-alert-success {
+    background: #ecfdf5;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+
+.archive-state {
+    margin-top: 12px;
+}
+
+.archive-state.archived {
+    background: #ecfdf5;
+    border-color: #bbf7d0;
+}
+
+.archive-state.pending {
+    background: #fff7ed;
+    border-color: #fed7aa;
+}

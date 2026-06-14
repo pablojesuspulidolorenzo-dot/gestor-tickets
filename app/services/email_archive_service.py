@@ -634,3 +634,49 @@ def archive_message_from_imap_readonly(
                 connection.logout()
             except Exception:
                 pass
+
+
+def find_archived_message_for_occurrence(
+    db: Session,
+    *,
+    account_id: int,
+    mailbox: str,
+    uid: str,
+) -> dict | None:
+    """
+    Busca si una ocurrencia IMAP ya está archivada en el sistema.
+
+    No toca IMAP. Solo consulta PostgreSQL.
+    """
+    row = db.execute(
+        text("""
+            SELECT
+                em.id AS email_message_id,
+                emo.id AS occurrence_id,
+                em.subject,
+                em.message_id_header,
+                em.eml_storage_path,
+                em.eml_sha256,
+                em.size_bytes,
+                emo.unread_at_import,
+                em.created_at AS archived_at
+            FROM gestor_tickets.email_message_occurrences emo
+            JOIN gestor_tickets.email_messages em
+              ON em.id = emo.email_message_id
+            WHERE emo.account_id = :account_id
+              AND emo.folder_name = :folder_name
+              AND emo.imap_uid = :imap_uid
+            ORDER BY emo.id DESC
+            LIMIT 1
+        """),
+        {
+            "account_id": account_id,
+            "folder_name": mailbox,
+            "imap_uid": uid,
+        },
+    ).mappings().first()
+
+    if not row:
+        return None
+
+    return dict(row)

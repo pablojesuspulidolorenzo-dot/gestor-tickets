@@ -50,7 +50,7 @@
                 {% endif %}
                 <div class="message-snippet">Fecha: {{ message.date or "Sin fecha" }}</div>
                 <div class="message-snippet">
-                    Estado:
+                    Estado IMAP:
                     {% if message.seen %}
                         leído
                     {% else %}
@@ -58,6 +58,21 @@
                     {% endif %}
                 </div>
             </article>
+
+            {% if archived %}
+            <article class="message-item archive-state archived">
+                <div class="message-subject">Archivado en el sistema</div>
+                <div class="message-snippet">email_messages.id: {{ archived.email_message_id }}</div>
+                <div class="message-snippet">occurrence.id: {{ archived.occurrence_id }}</div>
+            </article>
+            {% else %}
+            <article class="message-item archive-state pending">
+                <div class="message-subject">No archivado todavía</div>
+                <div class="message-snippet">
+                    Puedes archivarlo sin modificar el estado IMAP.
+                </div>
+            </article>
+            {% endif %}
         </div>
     </section>
 
@@ -68,6 +83,18 @@
             <p class="pane-empty-text">
                 Mensaje abierto en modo seguro con BODY.PEEK[]. No se ha marcado como leído.
             </p>
+
+            {% if archived %}
+            <div class="scheduled-alert scheduled-alert-success" style="margin: 18px 0;">
+                Este correo ya está archivado en el sistema como email_messages.id={{ archived.email_message_id }}.
+            </div>
+            {% else %}
+            <form method="post" action="/mailbox/message/archive?mailbox={{ message.mailbox|urlencode }}&uid={{ message.uid|urlencode }}" style="margin: 18px 0;">
+                <button class="primary-button" type="submit">
+                    Archivar correo en el sistema
+                </button>
+            </form>
+            {% endif %}
 
             {% if message.blocked_active_content %}
             <div class="scheduled-alert scheduled-alert-error" style="margin: 18px 0;">

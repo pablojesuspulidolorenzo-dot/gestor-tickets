@@ -8,6 +8,10 @@ from app.core.db import get_db
 from app.core.versioning import get_version_metadata
 from app.services.mailbox_preview_service import SAFETY_NOTES, preview_unified_collaborative_mailbox
 from app.services.message_detail_service import MESSAGE_DETAIL_SAFETY_NOTES, fetch_message_detail_readonly
+from app.services.email_archive_service import (
+    archive_message_from_imap_readonly,
+    find_archived_message_for_occurrence,
+)
 from app.services.session_auth_service import authenticate_session_user
 
 router = APIRouter()
@@ -241,6 +245,12 @@ def mailbox_message_page(
             mailbox=mailbox,
             uid=uid,
         )
+        archived = find_archived_message_for_occurrence(
+            db,
+            account_id=int(user["account_id"]),
+            mailbox=mailbox,
+            uid=uid,
+        )
         error = None
     except ValueError as exc:
         detail = None
@@ -277,8 +287,40 @@ def mailbox_message_page(
             user=user,
             active_section="mailbox",
             message=detail,
+            archived=archived,
             safety_notes=MESSAGE_DETAIL_SAFETY_NOTES,
         ),
+    )
+
+
+
+@router.post("/mailbox/message/archive", response_class=HTMLResponse)
+def mailbox_message_archive_web(
+    request: Request,
+    mailbox: str,
+    uid: str,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        archive_message_from_imap_readonly(
+            db,
+            account_id=int(user["account_id"]),
+            mailbox=mailbox,
+            uid=uid,
+        )
+    except ValueError:
+        return RedirectResponse(
+            url=f"/mailbox/message?mailbox={mailbox}&uid={uid}",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url=f"/mailbox/message?mailbox={mailbox}&uid={uid}&archived=1",
+        status_code=303,
     )
 
 
