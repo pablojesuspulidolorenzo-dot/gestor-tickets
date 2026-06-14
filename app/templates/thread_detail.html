@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Hilo #{{ thread.id }} - Gestor Tickets{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
+
+    <nav class="top-nav">
+        <a href="/app" class="nav-btn">Panel</a>
+        <a href="/mailbox" class="nav-btn">Bandeja</a>
+        <a href="/threads" class="nav-btn active">Hilos</a>
+        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
+        <a href="/accounts" class="nav-btn">Cuentas</a>
+        <a href="/settings" class="nav-btn">Configuración</a>
+    </nav>
+
+    <div class="system-status">
+        <span class="version-text">{{ version.full }}</span>
+        <form method="post" action="/logout">
+            <button class="logout-button">Salir</button>
+        </form>
+    </div>
+</header>
+
+<main class="app-container">
+    <section class="thread-list-panel">
+        <div class="panel-header">
+            <h2 class="panel-title">Hilo #{{ thread.id }}</h2>
+        </div>
+
+        <div class="message-scroll-area">
+            <a href="/threads" class="nav-btn" style="margin-bottom: 14px;">← Volver a hilos</a>
+
+            <article class="message-item active">
+                <div class="message-meta">
+                    <span class="message-sender">{{ thread.status }}</span>
+                    <span>{{ thread.message_count }} correo(s)</span>
+                </div>
+                <div class="message-subject">{{ thread.title or "(Sin asunto)" }}</div>
+                <div class="message-snippet">UID: {{ thread.system_thread_uid }}</div>
+                <div class="message-snippet">Normalizado: {{ thread.subject_normalized or "No disponible" }}</div>
+            </article>
+
+            {% for message in messages %}
+            <article class="message-item">
+                <div class="message-meta">
+                    <span class="message-sender">
+                        {% if message.direction == "inbound" %}
+                            Recibido
+                        {% elif message.direction == "outbound" %}
+                            Enviado
+                        {% else %}
+                            {{ message.direction or "Correo" }}
+                        {% endif %}
+                    </span>
+                    <span>{{ message.original_imap_folder or "" }} UID {{ message.original_imap_uid or "" }}</span>
+                </div>
+                <div class="message-subject">{{ message.subject or "(Sin asunto)" }}</div>
+                <div class="message-snippet">De: {{ message.from_name or message.from_email or "No disponible" }}</div>
+                {% if message.sent_at %}
+                <div class="message-snippet">Fecha: {{ message.sent_at }}</div>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="reading-ai-panel">
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">🧵</div>
+            <h2 style="margin: 0 0 8px;">{{ thread.title or "Hilo operativo" }}</h2>
+            <p class="pane-empty-text">
+                Este es el detalle interno del hilo. Aquí se irán agrupando los correos archivados y,
+                en la siguiente fase, se podrá relacionar el hilo con GLPI.
+            </p>
+
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">Hilo</div>
+                    <div class="info-value">#{{ thread.id }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Mensajes</div>
+                    <div class="info-value">{{ messages|length }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Último mensaje</div>
+                    <div class="info-value">{{ thread.last_message_at or "No disponible" }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Estado GLPI</div>
+                    <div class="info-value">Pendiente de relacionar</div>
+                </div>
+            </div>
+
+            {% if messages %}
+            <section class="email-body-card">
+                <h3 style="margin-top: 0;">Vista cronológica</h3>
+                {% for message in messages %}
+                <div class="timeline-item">
+                    <div class="timeline-title">{{ message.subject or "(Sin asunto)" }}</div>
+                    <div class="timeline-meta">
+                        {{ message.sent_at or "Sin fecha" }} · {{ message.from_email or "Sin remitente" }}
+                    </div>
+                    {% if message.body_text_preview %}
+                    <p class="pane-empty-text">{{ message.body_text_preview }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+        </div>
+    </section>
+</main>
+{% endblock %}

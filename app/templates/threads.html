@@ -35,7 +35,7 @@
         <div class="message-scroll-area">
             {% if threads %}
                 {% for thread in threads %}
-                <article class="message-item active">
+                <a class="message-item mailbox-message-link" href="/threads/{{ thread.id }}">
                     <div class="message-meta">
                         <span class="message-sender">Hilo #{{ thread.id }}</span>
                         <span>{{ thread.status }}</span>
@@ -50,7 +50,7 @@
                     <div class="message-snippet">
                         UID: {{ thread.system_thread_uid }}
                     </div>
-                </article>
+                </a>
                 {% endfor %}
             {% else %}
                 <article class="message-item active">

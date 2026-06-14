@@ -2,8 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.schemas.threads import ThreadFromEmailResponse, ThreadListResponse, ThreadSummary
-from app.services.thread_service import create_thread_from_email, list_system_threads
+from app.schemas.threads import (
+    ThreadDetailResponse,
+    ThreadFromEmailResponse,
+    ThreadListResponse,
+    ThreadMessageSummary,
+    ThreadSummary,
+)
+from app.services.thread_service import (
+    create_thread_from_email,
+    get_thread_detail,
+    list_system_threads,
+)
 
 router = APIRouter(tags=["threads"])
 
@@ -19,6 +29,22 @@ def _thread_schema(item: dict) -> ThreadSummary:
         message_count=item["message_count"],
         last_message_at=item.get("last_message_at"),
         updated_at=item["updated_at"],
+    )
+
+
+def _message_schema(item: dict) -> ThreadMessageSummary:
+    return ThreadMessageSummary(
+        member_id=item["member_id"],
+        email_message_id=item["email_message_id"],
+        position_asc=item["position_asc"],
+        subject=item.get("subject"),
+        from_email=item.get("from_email"),
+        from_name=item.get("from_name"),
+        direction=item.get("direction"),
+        sent_at=item.get("sent_at"),
+        original_imap_folder=item.get("original_imap_folder"),
+        original_imap_uid=item.get("original_imap_uid"),
+        body_text_preview=item.get("body_text_preview"),
     )
 
 
@@ -65,3 +91,26 @@ def create_from_email(
 
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/{thread_id}", response_model=ThreadDetailResponse)
+def thread_detail(
+    thread_id: int,
+    account_id: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        thread, messages = get_thread_detail(
+            db,
+            account_id=account_id,
+            thread_id=thread_id,
+        )
+
+        return ThreadDetailResponse(
+            ok=True,
+            thread=_thread_schema(thread),
+            messages=[_message_schema(item) for item in messages],
+        )
+
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -494,3 +494,22 @@ a {
     font-weight: 800;
     font-size: 0.84rem;
 }
+
+.timeline-item {
+    border-left: 4px solid #dbeafe;
+    padding: 0 0 18px 16px;
+    margin-bottom: 18px;
+}
+
+.timeline-title {
+    font-weight: 900;
+    color: var(--text);
+    margin-bottom: 5px;
+}
+
+.timeline-meta {
+    color: var(--text-muted);
+    font-size: 0.86rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+}

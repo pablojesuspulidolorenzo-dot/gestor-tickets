@@ -269,3 +269,65 @@ def create_thread_from_email(
         raise ValueError("No se pudo recuperar el hilo creado.")
 
     return created, True
+
+
+def list_thread_messages(
+    db: Session,
+    *,
+    account_id: int,
+    thread_id: int,
+) -> list[dict]:
+    rows = db.execute(
+        text("""
+            SELECT
+                etm.id AS member_id,
+                etm.email_message_id,
+                etm.position_asc,
+                em.subject,
+                em.from_email,
+                em.from_name,
+                em.direction::text AS direction,
+                em.sent_at,
+                em.original_imap_folder,
+                em.original_imap_uid,
+                em.body_text_preview
+            FROM gestor_tickets.email_thread_members etm
+            JOIN gestor_tickets.email_messages em
+              ON em.id = etm.email_message_id
+            JOIN gestor_tickets.system_threads st
+              ON st.id = etm.thread_id
+            WHERE etm.thread_id = :thread_id
+              AND st.account_id = :account_id
+              AND etm.status = 'active'
+            ORDER BY
+                coalesce(em.sent_at, em.created_at) ASC,
+                etm.position_asc ASC,
+                etm.id ASC
+        """),
+        {
+            "account_id": account_id,
+            "thread_id": thread_id,
+        },
+    ).mappings().all()
+
+    return [dict(row) for row in rows]
+
+
+def get_thread_detail(
+    db: Session,
+    *,
+    account_id: int,
+    thread_id: int,
+) -> tuple[dict, list[dict]]:
+    summary = get_thread_summary(db, thread_id=thread_id)
+
+    if not summary or int(summary["account_id"]) != int(account_id):
+        raise ValueError("El hilo no existe para esta cuenta.")
+
+    messages = list_thread_messages(
+        db,
+        account_id=account_id,
+        thread_id=thread_id,
+    )
+
+    return summary, messages

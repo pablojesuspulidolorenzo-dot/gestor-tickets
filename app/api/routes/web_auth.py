@@ -16,6 +16,7 @@ from app.services.session_auth_service import authenticate_session_user
 from app.services.thread_service import (
     create_thread_from_email,
     get_active_thread_for_email,
+    get_thread_detail,
     list_system_threads,
 )
 
@@ -374,6 +375,39 @@ def threads_page(
             user=user,
             active_section="threads",
             threads=threads,
+        ),
+    )
+
+
+
+@router.get("/threads/{thread_id}", response_class=HTMLResponse)
+def thread_detail_page(
+    request: Request,
+    thread_id: int,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        thread, messages = get_thread_detail(
+            db,
+            account_id=int(user["account_id"]),
+            thread_id=thread_id,
+        )
+    except ValueError:
+        return RedirectResponse(url="/threads", status_code=303)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="thread_detail.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="threads",
+            thread=thread,
+            messages=messages,
         ),
     )
 
