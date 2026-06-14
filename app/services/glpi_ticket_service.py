@@ -965,3 +965,143 @@ def refresh_glpi_ticket_cache(
     finally:
         if session_token:
             _kill_session(session_token)
+
+
+def add_glpi_followup_to_ticket(
+    db: Session,
+    *,
+    account_id: int,
+    ticket_cache_id: int,
+    user_id: int | None,
+    glpi_password: str,
+    content: str,
+    is_private: bool = False,
+) -> dict:
+    clean_content = _clean_text(content)
+    if not clean_content:
+        raise ValueError("El seguimiento no puede estar vacío.")
+
+    ticket = db.execute(
+        text("""
+            SELECT
+                id,
+                account_id,
+                glpi_instance_id,
+                glpi_ticket_id,
+                title
+            FROM gestor_tickets.glpi_ticket_cache
+            WHERE id = :ticket_cache_id
+              AND account_id = :account_id
+            LIMIT 1
+        """),
+        {
+            "account_id": account_id,
+            "ticket_cache_id": ticket_cache_id,
+        },
+    ).mappings().first()
+
+    if not ticket:
+        raise ValueError("El ticket GLPI cacheado no existe para esta cuenta.")
+
+    account = _get_account(db, account_id=account_id)
+    glpi_instance_id = int(ticket["glpi_instance_id"])
+    glpi_ticket_id = int(ticket["glpi_ticket_id"])
+
+    session_token: str | None = None
+
+    payload = {
+        "input": {
+            "itemtype": "Ticket",
+            "items_id": glpi_ticket_id,
+            "content": clean_content,
+            "is_private": 1 if is_private else 0,
+        }
+    }
+
+    try:
+        session_token = _init_session(account["glpi_login"], glpi_password)
+
+        with httpx.Client(timeout=settings.GLPI_TIMEOUT_SECONDS) as client:
+            response = client.post(
+                _api_url("ITILFollowup"),
+                headers=_headers(session_token),
+                params=_params(),
+                json=payload,
+            )
+
+        if response.status_code not in {200, 201}:
+            raise ValueError(
+                f"No se pudo crear seguimiento GLPI "
+                f"(HTTP {response.status_code}): {response.text[:1000]}"
+            )
+
+        response_json = response.json()
+        followup_id = (
+            response_json.get("id")
+            or response_json.get("item", {}).get("id")
+            if isinstance(response_json, dict)
+            else None
+        )
+
+        try:
+            followup_id = int(followup_id) if followup_id is not None else None
+        except (TypeError, ValueError):
+            followup_id = None
+
+        _log_glpi_operation(
+            db,
+            account_id=account_id,
+            glpi_instance_id=glpi_instance_id,
+            glpi_ticket_cache_id=ticket_cache_id,
+            operation_type="add_ticket_followup",
+            requested_by_user_id=user_id,
+            request_payload={
+                "ticket_cache_id": ticket_cache_id,
+                "glpi_ticket_id": glpi_ticket_id,
+                "content_preview": clean_content[:500],
+                "is_private": is_private,
+            },
+            response_status_code=response.status_code,
+            response_json=response_json if isinstance(response_json, dict) else {"raw": response_json},
+            success=True,
+        )
+
+        db.commit()
+
+        return {
+            "ticket_cache_id": ticket_cache_id,
+            "glpi_ticket_id": glpi_ticket_id,
+            "glpi_followup_id": followup_id,
+        }
+
+    except Exception as exc:
+        db.rollback()
+
+        try:
+            _log_glpi_operation(
+                db,
+                account_id=account_id,
+                glpi_instance_id=glpi_instance_id,
+                glpi_ticket_cache_id=ticket_cache_id,
+                operation_type="add_ticket_followup",
+                requested_by_user_id=user_id,
+                request_payload={
+                    "ticket_cache_id": ticket_cache_id,
+                    "glpi_ticket_id": glpi_ticket_id,
+                    "content_preview": clean_content[:500],
+                    "is_private": is_private,
+                },
+                response_status_code=None,
+                response_json={},
+                success=False,
+                error_message=str(exc),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        raise
+
+    finally:
+        if session_token:
+            _kill_session(session_token)

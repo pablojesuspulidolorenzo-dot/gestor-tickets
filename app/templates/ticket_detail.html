@@ -68,6 +68,30 @@
             </p>
 
             <section class="email-body-card">
+                <h3 style="margin-top: 0;">Añadir seguimiento GLPI</h3>
+                <p class="pane-empty-text">
+                    El comentario se añadirá al ticket real en GLPI. La contraseña no se guardará.
+                </p>
+                <form method="post" action="/tickets/{{ ticket.id }}/followup" class="form-stack">
+                    <label class="form-label">
+                        Comentario / seguimiento
+                        <textarea class="form-input" name="content" rows="5" required>Seguimiento añadido desde gestor-tickets.</textarea>
+                    </label>
+                    <label class="form-label">
+                        Contraseña GLPI
+                        <input class="form-input" type="password" name="glpi_password" autocomplete="current-password" required>
+                    </label>
+                    <label class="form-label checkbox-label">
+                        <input type="checkbox" name="is_private" value="1">
+                        Marcar como seguimiento privado
+                    </label>
+                    <button class="primary-button" type="submit">
+                        Añadir seguimiento en GLPI
+                    </button>
+                </form>
+            </section>
+
+            <section class="email-body-card">
                 <h3 style="margin-top: 0;">Refrescar desde GLPI</h3>
                 <p class="pane-empty-text">
                     La contraseña GLPI se usará solo para actualizar la caché de este ticket y no se guardará.

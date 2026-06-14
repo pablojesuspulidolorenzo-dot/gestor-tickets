@@ -12,6 +12,12 @@ class RefreshGlpiTicketRequest(BaseModel):
     glpi_password: SecretStr
 
 
+class AddGlpiTicketFollowupRequest(BaseModel):
+    glpi_password: SecretStr
+    content: str
+    is_private: bool = False
+
+
 class GlpiTicketCacheSummary(BaseModel):
     id: int
     glpi_ticket_id: int
@@ -74,4 +80,12 @@ class CreateGlpiTicketFromThreadResponse(BaseModel):
 class RefreshGlpiTicketResponse(BaseModel):
     ok: bool
     ticket: GlpiTicketListItem
+    message: str
+
+
+class AddGlpiTicketFollowupResponse(BaseModel):
+    ok: bool
+    ticket_cache_id: int
+    glpi_ticket_id: int
+    glpi_followup_id: int | None
     message: str

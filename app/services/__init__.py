@@ -11,6 +11,7 @@ from app.services.collaborative_imap_service import (
 from app.services.email_archive_service import archive_message_from_imap_readonly
 from app.services.glpi_service import GlpiService, glpi_service
 from app.services.glpi_ticket_service import (
+    add_glpi_followup_to_ticket,
     create_glpi_ticket_from_thread,
     get_glpi_ticket_detail,
     list_glpi_ticket_cache,
@@ -32,6 +33,7 @@ from app.services.thread_service import (
 __all__ = [
     "GlpiService",
     "archive_message_from_imap_readonly",
+    "add_glpi_followup_to_ticket",
     "configure_collaborative_account_imap",
     "create_audit_log",
     "create_glpi_ticket_from_thread",

@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.schemas.glpi_tickets import (
+    AddGlpiTicketFollowupRequest,
+    AddGlpiTicketFollowupResponse,
     CreateGlpiTicketFromThreadRequest,
     CreateGlpiTicketFromThreadResponse,
     GlpiTicketCacheSummary,
@@ -15,6 +17,7 @@ from app.schemas.glpi_tickets import (
     RefreshGlpiTicketResponse,
 )
 from app.services.glpi_ticket_service import (
+    add_glpi_followup_to_ticket,
     create_glpi_ticket_from_thread,
     get_glpi_ticket_detail,
     list_glpi_ticket_cache,
@@ -134,6 +137,37 @@ def refresh_ticket(
             ok=True,
             ticket=_ticket_list_item(ticket),
             message="Ticket GLPI refrescado correctamente desde la API.",
+        )
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/cache/{ticket_cache_id}/followup", response_model=AddGlpiTicketFollowupResponse)
+def add_followup(
+    ticket_cache_id: int,
+    payload: AddGlpiTicketFollowupRequest,
+    account_id: int,
+    user_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    try:
+        result = add_glpi_followup_to_ticket(
+            db,
+            account_id=account_id,
+            ticket_cache_id=ticket_cache_id,
+            user_id=user_id,
+            glpi_password=payload.glpi_password.get_secret_value(),
+            content=payload.content,
+            is_private=payload.is_private,
+        )
+
+        return AddGlpiTicketFollowupResponse(
+            ok=True,
+            ticket_cache_id=result["ticket_cache_id"],
+            glpi_ticket_id=result["glpi_ticket_id"],
+            glpi_followup_id=result["glpi_followup_id"],
+            message="Seguimiento GLPI añadido correctamente.",
         )
 
     except ValueError as exc:

@@ -13,6 +13,7 @@ from app.services.email_archive_service import (
 from app.services.mailbox_preview_service import SAFETY_NOTES, preview_unified_collaborative_mailbox
 from app.services.message_detail_service import MESSAGE_DETAIL_SAFETY_NOTES, fetch_message_detail_readonly
 from app.services.glpi_ticket_service import (
+    add_glpi_followup_to_ticket,
     create_glpi_ticket_from_thread,
     get_glpi_ticket_detail,
     list_glpi_ticket_cache,
@@ -532,6 +533,36 @@ def ticket_refresh_web(
             ticket_cache_id=ticket_cache_id,
             user_id=int(user["user_id"]),
             glpi_password=glpi_password,
+        )
+    except ValueError:
+        return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)
+
+    return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)
+
+
+
+@router.post("/tickets/{ticket_cache_id}/followup", response_class=HTMLResponse)
+def ticket_followup_web(
+    request: Request,
+    ticket_cache_id: int,
+    glpi_password: str = Form(...),
+    content: str = Form(...),
+    is_private: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    try:
+        add_glpi_followup_to_ticket(
+            db,
+            account_id=int(user["account_id"]),
+            ticket_cache_id=ticket_cache_id,
+            user_id=int(user["user_id"]),
+            glpi_password=glpi_password,
+            content=content,
+            is_private=bool(is_private),
         )
     except ValueError:
         return RedirectResponse(url=f"/tickets/{ticket_cache_id}", status_code=303)
