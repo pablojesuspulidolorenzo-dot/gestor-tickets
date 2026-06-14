@@ -1,27 +1,35 @@
-import os
 from pathlib import Path
 
 from app.core.config import settings
 
 
-def get_app_version() -> str:
-    version_file = os.getenv("APP_VERSION_FILE", "/app/version.txt")
-    path = Path(version_file)
+def _read_version_file() -> str | None:
+    candidates = [
+        Path("/app/version.txt"),
+        Path("app/version.txt"),
+        Path("version.txt"),
+    ]
 
-    if path.exists():
-        try:
+    for path in candidates:
+        if path.exists():
             value = path.read_text(encoding="utf-8").strip()
             if value:
                 return value
-        except Exception:
-            pass
 
-    return settings.full_version
+    return None
 
 
-def get_version_metadata() -> dict:
+def get_version_metadata() -> dict[str, str | int]:
+    full = _read_version_file() or settings.full_version
+
+    parts = full.split(".")
+    subversion = 0
+
+    if len(parts) >= 3 and parts[-1].isdigit():
+        subversion = int(parts[-1])
+
     return {
-        "version": settings.APP_VERSION,
-        "subversion": settings.APP_SUBVERSION,
-        "full": get_app_version(),
+        "version": full,
+        "subversion": subversion,
+        "full": full,
     }

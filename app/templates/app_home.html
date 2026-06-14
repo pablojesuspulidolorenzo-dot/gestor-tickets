@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Gestor Tickets{% endblock %}
+{% block title %}Panel - Gestor Tickets{% endblock %}
 
 {% block content %}
 <header class="app-header">
@@ -9,15 +9,19 @@
         <h1 class="logo-text">gestor-tickets</h1>
     </div>
 
-    <nav style="display: flex; gap: 8px; margin-left: 24px; flex: 1;">
+    <nav class="top-nav">
         <a href="/app" class="nav-btn active">Panel</a>
-        <a href="/api/health" class="nav-btn">API Health</a>
+        <a href="#" class="nav-btn">Bandeja</a>
+        <a href="#" class="nav-btn">Hilos</a>
+        <a href="#" class="nav-btn">Tickets GLPI</a>
+        <a href="#" class="nav-btn">Cuentas</a>
+        <a href="#" class="nav-btn">Configuración</a>
     </nav>
 
     <div class="system-status">
         <span class="version-text">{{ version.full }}</span>
         <form method="post" action="/logout">
-            <button class="nav-btn" style="cursor:pointer;">Salir</button>
+            <button class="logout-button">Salir</button>
         </form>
     </div>
 </header>
@@ -25,35 +29,54 @@
 <main class="app-container">
     <section class="thread-list-panel">
         <div class="panel-header">
-            <h2 class="panel-title">Cuenta</h2>
+            <h2 class="panel-title">Cuenta activa</h2>
         </div>
 
         <div class="message-scroll-area">
-            <div class="message-item active">
+            <article class="message-item active">
                 <div class="message-meta">
                     <span class="message-sender">{{ user.display_name }}</span>
+                    <span>{{ user.role }}</span>
                 </div>
                 <div class="message-subject">{{ user.account_email }}</div>
                 <div class="message-snippet">
-                    Rol: {{ user.role }} · Modo: {{ user.auth_mode }}
+                    Modo de acceso: {{ user.auth_mode }}
                 </div>
-            </div>
+            </article>
         </div>
     </section>
 
     <section class="reading-ai-panel">
         <div class="pane-empty-state">
             <div class="pane-empty-icon">✅</div>
-            <h2>Sesión iniciada correctamente</h2>
+            <h2 style="margin: 0 0 8px;">Sesión iniciada correctamente</h2>
             <p class="pane-empty-text">
-                Ya estás autenticado en el nuevo gestor de tickets.
+                Ya estás autenticado en el nuevo gestor. A partir de aquí iremos añadiendo bandeja,
+                hilos, relación con GLPI e IA.
             </p>
 
-            <pre style="margin-top: 24px; text-align: left; background: #f1f5f9; padding: 16px; border-radius: 8px; color: #334155; max-width: 780px; white-space: pre-wrap;">Usuario interno: {{ user.user_id }}
-Cuenta interna: {{ user.account_id }}
-Cuenta colaborativa: {{ user.account_email }}
-Login usado: {{ user.login_identifier }}
-Rol: {{ user.role }}</pre>
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">Usuario interno</div>
+                    <div class="info-value">{{ user.user_id }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Cuenta interna</div>
+                    <div class="info-value">{{ user.account_id }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Cuenta colaborativa</div>
+                    <div class="info-value">{{ user.account_email }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Rol</div>
+                    <div class="info-value">{{ user.role }}</div>
+                </div>
+            </div>
+
+            <pre class="code-box">Login usado: {{ user.login_identifier }}
+Modo: {{ user.auth_mode }}
+Versión: {{ version.full }}</pre>
         </div>
     </section>
 </main>

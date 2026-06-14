@@ -8,8 +8,15 @@
         <div class="logo-icon">GT</div>
         <h1 class="logo-text">gestor-tickets</h1>
     </div>
+
+    <div class="top-nav">
+        <a href="/" class="nav-btn">Inicio</a>
+        <a href="/login" class="nav-btn active">Acceso</a>
+        <a href="/api/health" class="nav-btn">API Health</a>
+    </div>
+
     <div class="system-status">
-        <div class="status-badge prod">
+        <div class="status-badge">
             <span class="badge-dot"></span>
             Docker activo
         </div>
@@ -18,52 +25,46 @@
 </header>
 
 <main class="config-page-shell">
-    <section class="config-card" style="max-width: 520px;">
-        <div>
-            <h2 style="font-size: 1.45rem; margin-bottom: 8px;">Acceso al gestor</h2>
-            <p style="color: var(--text-secondary); line-height: 1.5;">
-                Entra con la cuenta colaborativa. La contraseña se valida contra GLPI.
+    <section class="config-card">
+        <div style="margin-bottom: 24px;">
+            <h2 style="font-size: 1.65rem; margin: 0 0 8px;">Acceso al gestor</h2>
+            <p style="color: var(--text-secondary); line-height: 1.5; margin: 0;">
+                Entra con la cuenta colaborativa. La contraseña se valida contra GLPI y no se guarda.
             </p>
         </div>
 
         {% if error %}
-        <div class="scheduled-alert scheduled-alert-error">
+        <div class="scheduled-alert scheduled-alert-error" style="margin-bottom: 18px;">
             {{ error }}
         </div>
         {% endif %}
 
-        <form method="post" action="/login" style="display: flex; flex-direction: column; gap: 16px;">
-            <label style="display: flex; flex-direction: column; gap: 6px;">
-                <span style="font-weight: 700;">Usuario</span>
+        <form method="post" action="/login" class="form-stack">
+            <label class="form-label">
+                Usuario
                 <input
+                    class="form-input"
                     type="text"
                     name="login_identifier"
                     value="{{ login_identifier }}"
                     autocomplete="username"
                     required
-                    style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px;"
                 >
-                <small style="color: var(--text-muted);">
-                    Ejemplo cuenta principal: sistemas-tic@gestor-tickets.es
-                </small>
+                <small>Ejemplo cuenta principal: sistemas-tic@gestor-tickets.es</small>
             </label>
 
-            <label style="display: flex; flex-direction: column; gap: 6px;">
-                <span style="font-weight: 700;">Contraseña</span>
+            <label class="form-label">
+                Contraseña
                 <input
+                    class="form-input"
                     type="password"
                     name="password"
                     autocomplete="current-password"
                     required
-                    style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px;"
                 >
             </label>
 
-            <button
-                type="submit"
-                class="nav-btn active"
-                style="justify-content: center; cursor: pointer; padding: 12px;"
-            >
+            <button type="submit" class="primary-button">
                 Entrar
             </button>
         </form>

@@ -1,22 +1,21 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Gestor Tickets{% endblock %}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <link rel="stylesheet" href="/static/css/app.css">
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <div class="app-shell">
+        {% block content %}{% endblock %}
+    </div>
 
     {% if htmx_local %}
     <script src="/static/vendor/htmx/htmx.min.js"></script>
-    {% else %}
-    <script src="/static/js/htmx.min.js"></script>
     {% endif %}
-
-    {% block extra_head %}{% endblock %}
-</head>
-<body>
-    {% block content %}{% endblock %}
     <script src="/static/js/app.js"></script>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

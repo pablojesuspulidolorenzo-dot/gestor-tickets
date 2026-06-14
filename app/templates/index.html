@@ -9,7 +9,7 @@
         <h1 class="logo-text">gestor-tickets</h1>
     </div>
 
-    <nav style="display: flex; gap: 8px; margin-left: 24px; flex: 1;">
+    <nav class="top-nav">
         <a href="/" class="nav-btn active">Inicio</a>
         <a href="/login" class="nav-btn">Entrar</a>
         <a href="/health" class="nav-btn">Health</a>
@@ -17,7 +17,7 @@
     </nav>
 
     <div class="system-status">
-        <div class="status-badge prod">
+        <div class="status-badge">
             <span class="badge-dot"></span>
             Docker activo
         </div>
@@ -25,39 +25,37 @@
     </div>
 </header>
 
-<main class="app-container">
-    <section class="reading-ai-panel">
-        <div class="pane-empty-state">
-            <div class="pane-empty-icon">✉️</div>
-            <h2>Base del nuevo gestor de tickets preparada</h2>
-            <p class="pane-empty-text">
-                FastAPI está funcionando dentro del contenedor Docker y conectado a PostgreSQL.
-            </p>
+<main class="page-shell">
+    <section class="hero-card">
+        <div class="hero-icon">✉️</div>
+        <h2 class="hero-title">Nuevo gestor de tickets</h2>
+        <p class="hero-text">
+            Base FastAPI dockerizada, conectada a PostgreSQL y validando cuentas principales contra GLPI.
+            La siguiente fase incorporará la bandeja de correo y la estructura de hilos.
+        </p>
 
-            <a href="/login" class="nav-btn active" style="margin-top: 16px;">
-                Entrar al gestor
-            </a>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px;">
+            <a href="/login" class="nav-btn active">Entrar al gestor</a>
+            <a href="/api/health" class="nav-btn">Ver API Health</a>
+        </div>
 
-            <div
-                hx-get="/htmx/ping"
-                hx-target="#htmx-result"
-                hx-swap="innerHTML"
-                style="margin-top: 20px;"
-            >
-                <button class="nav-btn" style="cursor:pointer;">
-                    Probar HTMX
-                </button>
-            </div>
+        <div
+            hx-get="/htmx/ping"
+            hx-target="#htmx-result"
+            hx-swap="innerHTML"
+            style="margin-top: 22px;"
+        >
+            <button class="logout-button">Probar HTMX</button>
+        </div>
 
-            <div id="htmx-result" style="margin-top: 16px;"></div>
+        <div id="htmx-result" style="margin-top: 16px;"></div>
 
-            <pre style="margin-top: 24px; text-align: left; background: #f1f5f9; padding: 16px; border-radius: 8px; color: #334155; max-width: 780px; white-space: pre-wrap;">App: {{ app_name }}
+        <pre class="code-box">App: {{ app_name }}
 Entorno: {{ app_env }}
 PostgreSQL: {{ postgres_host }}
 Schema: {{ db_schema }}
 GLPI: {{ glpi_base_url }}
 Versión: {{ version.full }}</pre>
-        </div>
     </section>
 </main>
 {% endblock %}
