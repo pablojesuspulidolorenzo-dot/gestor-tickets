@@ -33,3 +33,6 @@ scripts/backups/
 # Dumps / esquemas generados manualmente
 *.backup.sql
 *.dump
+
+# Backups locales
+*.bak
