@@ -10,29 +10,22 @@ __pycache__/
 # Entornos locales
 .venv/
 venv/
-
 # Variables y secretos
 .env
 .env.*
 !.env.example
-
 # Datos persistentes y logs
 data/
 logs/
 *.log
-
 # Backups locales generados durante desarrollo asistido
 scripts/backups/
-
 # Archivos temporales
 *.tmp
 *.bak
 *.swp
 .DS_Store
-
 # Dumps / esquemas generados manualmente
 *.backup.sql
 *.dump
-
 # Backups locales
-*.bak
