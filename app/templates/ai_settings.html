@@ -194,7 +194,17 @@
                 </div>
 
                 <div class="ai-config-grid">
-                    <label class="ai-config-check"><input type="checkbox" name="enable_thinking" value="1" {% if form_endpoint and form_endpoint.enable_thinking %}checked{% endif %}> Enable thinking</label>
+                    <label class="ai-config-check ai-enable-thinking-field"><input type="checkbox" name="enable_thinking" value="1" {% if form_endpoint and form_endpoint.enable_thinking %}checked{% endif %}> Enable thinking</label>
+                    <label class="ai-config-field ai-google-reasoning-field"><span>Reasoning effort Google/Gemini</span>
+                        {% set current_reasoning = form_endpoint.reasoning_effort if form_endpoint else 'none' %}
+                        <select class="form-input" name="reasoning_effort">
+                            <option value="none" {% if current_reasoning == 'none' %}selected{% endif %}>none</option>
+                            <option value="low" {% if current_reasoning == 'low' %}selected{% endif %}>low</option>
+                            <option value="medium" {% if current_reasoning == 'medium' %}selected{% endif %}>medium</option>
+                            <option value="high" {% if current_reasoning == 'high' %}selected{% endif %}>high</option>
+                        </select>
+                        <small>Para Google OpenAI-compatible se envia como reasoning_effort y no se combina con enable_thinking.</small>
+                    </label>
                     <label class="ai-config-check"><input type="checkbox" name="is_active" value="1" {% if not form_endpoint or form_endpoint.is_active %}checked{% endif %}> Activo</label>
                     <label class="ai-config-check"><input type="checkbox" name="is_default" value="1" {% if form_endpoint and form_endpoint.is_default %}checked{% endif %}> Predeterminado</label>
                 </div>

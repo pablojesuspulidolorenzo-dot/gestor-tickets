@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any
 from urllib.parse import urljoin
@@ -10,6 +11,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.ai_settings_service import get_endpoint_secret, list_models, _path, _sanitize_extra_headers
+
+
+REASONING_EFFORT_VALUES = {"none", "low", "medium", "high"}
+THINKING_BLOCK_RE = re.compile(r"<thought>.*?</thought>", re.IGNORECASE | re.DOTALL)
 
 
 def _join_url(base_url: str, path: str) -> str:
@@ -22,6 +27,25 @@ def _api_key_plain(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalize_reasoning_effort(value: Any) -> str:
+    effort = str(value or "none").strip().lower()
+    return effort if effort in REASONING_EFFORT_VALUES else "none"
+
+
+def _apply_reasoning_payload(request_payload: dict[str, Any], config: dict[str, Any]) -> None:
+    if str(config.get("provider_kind") or "").strip().lower() == "gemini":
+        request_payload["reasoning_effort"] = _normalize_reasoning_effort(config.get("reasoning_effort"))
+        return
+    if config.get("enable_thinking"):
+        request_payload["enable_thinking"] = True
+
+
+def _strip_thinking_blocks(content: str) -> tuple[str, bool]:
+    original = content or ""
+    cleaned = THINKING_BLOCK_RE.sub("", original).strip()
+    return cleaned, cleaned != original.strip()
+
+
 def _preview_endpoint(payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
     api_key = _api_key_plain(payload.get("api_key"))
     if not api_key:
@@ -31,6 +55,9 @@ def _preview_endpoint(payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
         "base_url": str(payload.get("base_url") or "").strip().rstrip("/"),
         "models_endpoint_path": _path(payload.get("models_endpoint_path"), "/models"),
         "chat_endpoint_path": _path(payload.get("chat_endpoint_path"), "/chat/completions"),
+        "provider_kind": str(payload.get("provider_kind") or "generic").strip().lower(),
+        "reasoning_effort": _normalize_reasoning_effort(payload.get("reasoning_effort")),
+        "enable_thinking": bool(payload.get("enable_thinking")),
         "timeout_seconds": int(payload.get("timeout_seconds") or 60),
         "top_p": float(payload.get("top_p") if payload.get("top_p") is not None else 1.0),
         "extra_headers_json": _sanitize_extra_headers(payload.get("extra_headers_json") or {}),
@@ -349,8 +376,7 @@ def validate_model(db: Session, endpoint_id: int, model_id: str | None = None) -
     }
     if endpoint.get("top_p") is not None:
         payload["top_p"] = endpoint["top_p"]
-    if endpoint.get("enable_thinking"):
-        payload["enable_thinking"] = True
+    _apply_reasoning_payload(payload, endpoint)
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **(endpoint.get("extra_headers_json") or {})}
     start = time.monotonic()
@@ -380,17 +406,13 @@ def validate_model(db: Session, endpoint_id: int, model_id: str | None = None) -
                 "response_text_preview": response.text[:1200],
             }
         else:
-            content = _extract_chat_content(response_json)
-            thinking_detected = "<thought>" in content.lower() and "</thought>" in content.lower()
+            raw_content = _extract_chat_content(response_json)
+            content, thinking_detected = _strip_thinking_blocks(raw_content)
             strict_json_ok = _strict_json_ok(content)
-            ok = strict_json_ok and not thinking_detected
+            ok = strict_json_ok
             status = "ok" if ok else "partial"
-            error_type = None if ok else ("thinking_detected" if thinking_detected else "json_not_strict")
-            error_message = None if ok else (
-                "Modelo accesible, pero no devuelve JSON estricto porque incluye bloque thinking."
-                if thinking_detected else
-                "Modelo accesible, pero la respuesta no es JSON estricto."
-            )
+            error_type = None if ok else "json_not_strict"
+            error_message = None if ok else "Modelo accesible, pero la respuesta util no es JSON estricto."
             result = {
                 "ok": ok,
                 "status": status,
@@ -510,8 +532,7 @@ def validate_model_preview(payload: dict[str, Any], model_id: str | None = None)
     }
     if endpoint.get("top_p") is not None:
         request_payload["top_p"] = endpoint["top_p"]
-    if payload.get("enable_thinking"):
-        request_payload["enable_thinking"] = True
+    _apply_reasoning_payload(request_payload, endpoint)
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **(endpoint.get("extra_headers_json") or {})}
     start = time.monotonic()
@@ -538,20 +559,16 @@ def validate_model_preview(payload: dict[str, Any], model_id: str | None = None)
                 "response_text_preview": response.text[:1200],
             }
 
-        content = _extract_chat_content(response_json)
-        thinking_detected = "<thought>" in content.lower() and "</thought>" in content.lower()
+        raw_content = _extract_chat_content(response_json)
+        content, thinking_detected = _strip_thinking_blocks(raw_content)
         strict_json_ok = _strict_json_ok(content)
-        ok = strict_json_ok and not thinking_detected
-        error_type = None if ok else ("thinking_detected" if thinking_detected else "json_not_strict")
+        ok = strict_json_ok
+        error_type = None if ok else "json_not_strict"
         return {
             "ok": ok,
             "status": "ok" if ok else "partial",
             "error_type": error_type,
-            "error_message": None if ok else (
-                "Modelo accesible, pero no devuelve JSON estricto porque incluye bloque thinking."
-                if thinking_detected else
-                "Modelo accesible, pero la respuesta no es JSON estricto."
-            ),
+            "error_message": None if ok else "Modelo accesible, pero la respuesta util no es JSON estricto.",
             "http_status": response.status_code,
             "latency_ms": latency_ms,
             "strict_json_ok": strict_json_ok,

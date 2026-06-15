@@ -79,6 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
             top_p: Number(form.querySelector('input[name="top_p"]')?.value || 1),
             max_tokens: Number(form.querySelector('input[name="max_tokens"]')?.value || 1024),
             enable_thinking: Boolean(form.querySelector('input[name="enable_thinking"]')?.checked),
+            reasoning_effort: form.querySelector('select[name="reasoning_effort"]')?.value || "none",
             daily_limit: Number(form.querySelector('input[name="daily_limit"]')?.value || 0) || null,
             free_quota_notes: form.querySelector('textarea[name="free_quota_notes"]')?.value || null,
             retry_policy_json: safeJson(form.querySelector('textarea[name="retry_policy_json"]')?.value, null),
@@ -93,6 +94,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.detail || "error_unknown");
         return data;
+    };
+
+    const toggleReasoningFields = (form) => {
+        const provider = form.querySelector('select[name="provider_kind"]')?.value || "generic";
+        const isGemini = provider === "gemini";
+        form.querySelectorAll(".ai-google-reasoning-field").forEach((field) => { field.hidden = !isGemini; });
+        form.querySelectorAll(".ai-enable-thinking-field").forEach((field) => { field.hidden = isGemini; });
     };
 
     const applyProviderPreset = (select, force = false) => {
@@ -163,14 +171,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const box = form.querySelector("[data-ai-validation-result]");
         if (!box) return;
         const status = data.status === "ok" ? "OK" : data.status === "partial" ? "Advertencia" : "Error";
-        const sent = {model: requestPayload.model_id || requestPayload.default_model, temperature: requestPayload.temperature, top_p: requestPayload.top_p, max_tokens: requestPayload.max_tokens, timeout_seconds: requestPayload.timeout_seconds, enable_thinking: requestPayload.enable_thinking, authorization: "Bearer ***redacted***", messages: "[technical validation prompt only]"};
+        const sent = {model: requestPayload.model_id || requestPayload.default_model, temperature: requestPayload.temperature, top_p: requestPayload.top_p, max_tokens: requestPayload.max_tokens, timeout_seconds: requestPayload.timeout_seconds, enable_thinking: requestPayload.enable_thinking, reasoning_effort: requestPayload.reasoning_effort, authorization: "Bearer ***redacted***", messages: "[technical validation prompt only]"};
         box.innerHTML = `<strong>${status}</strong><div>HTTP: ${data.http_status ?? "-"} · Latencia: ${data.latency_ms ?? "-"} ms · JSON estricto: ${data.strict_json_ok ? "sí" : "no"} · Thinking: ${data.thinking_detected ? "sí" : "no"}</div>${data.error_type ? `<div>Error: ${data.error_type}</div>` : ""}${data.error_message ? `<div>${data.error_message}</div>` : ""}<pre>Payload seguro:\n${JSON.stringify(sent, null, 2)}</pre>${data.response_text_preview ? `<pre>Respuesta preview:\n${data.response_text_preview}</pre>` : ""}`;
     };
 
     aiForms.forEach((form) => {
         form.querySelectorAll(".ai-provider-select").forEach((select) => {
             applyProviderPreset(select, false);
-            select.addEventListener("change", () => applyProviderPreset(select, true));
+            toggleReasoningFields(form);
+            select.addEventListener("change", () => { applyProviderPreset(select, true); toggleReasoningFields(form); });
         });
         form.querySelector(".ai-model-filter")?.addEventListener("input", (event) => {
             const select = form.querySelector(".ai-model-select");

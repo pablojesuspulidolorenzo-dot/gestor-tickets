@@ -19,6 +19,7 @@ class AiEndpointBase(BaseModel):
     top_p: float = Field(default=1.0, ge=0, le=1)
     max_tokens: int = Field(default=1024, ge=1, le=200000)
     enable_thinking: bool = False
+    reasoning_effort: str = "none"
     daily_limit: int | None = None
     free_quota_notes: str | None = None
     retry_policy_json: dict[str, Any] | None = None

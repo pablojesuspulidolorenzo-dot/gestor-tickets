@@ -94,6 +94,7 @@ def _row_to_endpoint(row) -> dict:
             item[key] = str(item[key])
     item["retry_policy_json"] = item.get("retry_policy_json") or DEFAULT_RETRY_POLICY
     item["extra_headers_json"] = item.get("extra_headers_json") or {}
+    item["reasoning_effort"] = item.get("reasoning_effort") or "none"
     item["temperature"] = float(item["temperature"])
     item["top_p"] = float(item["top_p"])
     return item
@@ -112,7 +113,7 @@ def _endpoint_select_sql() -> str:
         SELECT
             id, name, provider_kind, base_url, models_endpoint_path, chat_endpoint_path,
             api_key_ciphertext, default_model, is_active, is_default, timeout_seconds,
-            temperature, top_p, max_tokens, enable_thinking, daily_limit, free_quota_notes,
+            temperature, top_p, max_tokens, enable_thinking, reasoning_effort, daily_limit, free_quota_notes,
             retry_policy_json, extra_headers_json, last_models_sync_at, last_validation_at,
             last_validation_status, last_validation_error_type, last_validation_error_message,
             created_at, updated_at
@@ -162,6 +163,10 @@ def _values(payload: dict[str, Any], *, existing_ciphertext: str | None = None) 
     if api_key_value:
         ciphertext = encrypt_text(api_key_value)
 
+    reasoning_effort = _clean(payload.get("reasoning_effort") or "none").lower()
+    if reasoning_effort not in {"none", "low", "medium", "high"}:
+        raise ValueError("reasoning_effort no valido")
+
     return {
         "name": _clean(payload.get("name")),
         "provider_kind": _clean(payload.get("provider_kind")) or "generic",
@@ -177,6 +182,7 @@ def _values(payload: dict[str, Any], *, existing_ciphertext: str | None = None) 
         "top_p": float(payload.get("top_p") if payload.get("top_p") is not None else 1.0),
         "max_tokens": int(payload.get("max_tokens") or 1024),
         "enable_thinking": bool(payload.get("enable_thinking")),
+        "reasoning_effort": reasoning_effort,
         "daily_limit": payload.get("daily_limit"),
         "free_quota_notes": _clean(payload.get("free_quota_notes")) or None,
         "retry_policy_json": json.dumps(payload.get("retry_policy_json") or DEFAULT_RETRY_POLICY, ensure_ascii=False),
@@ -197,13 +203,13 @@ def create_endpoint(db: Session, payload: dict[str, Any]) -> dict:
             INSERT INTO gestor_tickets.ai_llm_endpoints (
                 name, provider_kind, base_url, models_endpoint_path, chat_endpoint_path,
                 api_key_ciphertext, default_model, is_active, is_default, timeout_seconds,
-                temperature, top_p, max_tokens, enable_thinking, daily_limit, free_quota_notes,
+                temperature, top_p, max_tokens, enable_thinking, reasoning_effort, daily_limit, free_quota_notes,
                 retry_policy_json, extra_headers_json, updated_at
             )
             VALUES (
                 :name, :provider_kind, :base_url, :models_endpoint_path, :chat_endpoint_path,
                 :api_key_ciphertext, :default_model, :is_active, :is_default, :timeout_seconds,
-                :temperature, :top_p, :max_tokens, :enable_thinking, :daily_limit, :free_quota_notes,
+                :temperature, :top_p, :max_tokens, :enable_thinking, :reasoning_effort, :daily_limit, :free_quota_notes,
                 CAST(:retry_policy_json AS jsonb), CAST(:extra_headers_json AS jsonb), now()
             )
             RETURNING id
@@ -250,6 +256,7 @@ def update_endpoint(db: Session, endpoint_id: int, payload: dict[str, Any]) -> d
                 top_p = :top_p,
                 max_tokens = :max_tokens,
                 enable_thinking = :enable_thinking,
+                reasoning_effort = :reasoning_effort,
                 daily_limit = :daily_limit,
                 free_quota_notes = :free_quota_notes,
                 retry_policy_json = CAST(:retry_policy_json AS jsonb),
