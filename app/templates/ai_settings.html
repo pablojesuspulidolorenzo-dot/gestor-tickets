@@ -28,237 +28,228 @@
     </div>
 </header>
 
-<main class="app-container">
-    <section class="thread-list-panel">
-        <div class="panel-header">
-            <h2 class="panel-title">Endpoints IA</h2>
+<main class="ai-config-shell">
+    <aside class="ai-config-sidebar">
+        <div class="ai-config-sidebar-header">
+            <div>
+                <p class="ai-config-kicker">Endpoints</p>
+                <h2>Configuración IA</h2>
+            </div>
+            <a class="ai-config-new-link" href="/settings/ai">Nuevo</a>
         </div>
 
-        <div class="message-scroll-area">
+        <div class="ai-config-endpoints">
             {% if endpoints %}
                 {% for endpoint in endpoints %}
-                <a class="message-item {% if selected_endpoint and endpoint.id == selected_endpoint.id %}active{% endif %}" href="/settings/ai?endpoint_id={{ endpoint.id }}">
-                    <div class="message-meta">
-                        <span class="message-sender">{{ endpoint.name }}</span>
-                        <span>{% if endpoint.is_active %}Activo{% else %}Inactivo{% endif %}</span>
+                <a class="ai-config-endpoint {% if selected_endpoint and endpoint.id == selected_endpoint.id %}is-selected{% endif %}" href="/settings/ai?endpoint_id={{ endpoint.id }}">
+                    <div class="ai-config-endpoint-top">
+                        <span class="ai-config-endpoint-name">{{ endpoint.name }}</span>
+                        <span class="ai-config-status {% if endpoint.is_active %}is-ok{% else %}is-muted{% endif %}">{% if endpoint.is_active %}Activo{% else %}Inactivo{% endif %}</span>
                     </div>
-                    <div class="message-subject">{{ endpoint.default_model or "Sin modelo" }}</div>
-                    <div class="message-snippet">{{ endpoint.provider_kind }} · {{ endpoint.base_url }}</div>
-                    {% if endpoint.is_default %}
-                    <div class="message-snippet">Predeterminado</div>
-                    {% endif %}
+                    <div class="ai-config-endpoint-model">{{ endpoint.default_model or "Sin modelo seleccionado" }}</div>
+                    <div class="ai-config-endpoint-url" title="{{ endpoint.base_url }}">{{ endpoint.provider_kind }} · {{ endpoint.base_url }}</div>
+                    {% if endpoint.is_default %}<span class="ai-config-status is-default">Predeterminado</span>{% endif %}
                 </a>
                 {% endfor %}
             {% else %}
-                <article class="message-item active">
-                    <div class="message-subject">Sin endpoints configurados</div>
-                    <div class="message-snippet">Añade un endpoint OpenAI-compatible para detectar modelos.</div>
-                </article>
+                <div class="ai-config-empty">
+                    <strong>Sin endpoints</strong>
+                    <span>Añade un proveedor OpenAI-compatible para detectar modelos.</span>
+                </div>
             {% endif %}
         </div>
-    </section>
+    </aside>
 
-    <section class="reading-ai-panel">
-        <div class="pane-empty-state">
-            <div class="pane-empty-icon">IA</div>
-            <h2 style="margin: 0 0 8px;">Configuración IA</h2>
-            <p class="pane-empty-text">
-                No enviar correos reales, datos personales, datos sanitarios ni información confidencial a proveedores IA gratuitos externos. Usar solo datos de prueba o contenido anonimizado.
-            </p>
-
-            {% if error %}
-            <section class="email-body-card">
-                <h3 style="margin-top: 0;">Resultado</h3>
-                <p class="pane-empty-text">Error: {{ error }}</p>
-            </section>
-            {% elif message %}
-            <section class="email-body-card">
-                <h3 style="margin-top: 0;">Resultado</h3>
-                <p class="pane-empty-text">Operación completada: {{ message }}</p>
-            </section>
+    <section class="ai-config-main">
+        <div class="ai-config-hero">
+            <div>
+                <p class="ai-config-kicker">Flujo guiado</p>
+                <h2>{% if selected_endpoint %}Editar endpoint{% else %}Nuevo endpoint IA{% endif %}</h2>
+                <p>No enviar correos reales, datos personales, datos sanitarios ni información confidencial a proveedores IA gratuitos externos. Usar solo datos de prueba o contenido anonimizado.</p>
+            </div>
+            {% if selected_endpoint and selected_endpoint.api_key_masked %}
+            <span class="ai-config-key-state">API key guardada: {{ selected_endpoint.api_key_masked }}</span>
             {% endif %}
+        </div>
 
-            {% set form_endpoint = selected_endpoint %}
-            <section class="email-body-card">
-                <h3 style="margin-top: 0;">{% if form_endpoint %}Editar endpoint{% else %}Crear endpoint{% endif %}</h3>
-                <form method="post" action="{% if form_endpoint %}/settings/ai/endpoints/{{ form_endpoint.id }}{% else %}/settings/ai/endpoints{% endif %}" class="form-stack ai-settings-form">
-                    <label class="form-label">
-                        Nombre visible
+        {% if error %}
+        <div class="ai-config-alert is-error">Error: {{ error }}</div>
+        {% elif message %}
+        <div class="ai-config-alert is-ok">Operación completada: {{ message }}</div>
+        {% endif %}
+
+        {% set form_endpoint = selected_endpoint %}
+        <form method="post"
+              action="{% if form_endpoint %}/settings/ai/endpoints/{{ form_endpoint.id }}{% else %}/settings/ai/endpoints{% endif %}"
+              class="ai-settings-form ai-config-form"
+              data-endpoint-id="{{ form_endpoint.id if form_endpoint else '' }}"
+              data-has-api-key="{% if form_endpoint and form_endpoint.api_key_masked %}true{% else %}false{% endif %}"
+              data-has-models="{% if models %}true{% else %}false{% endif %}"
+              data-has-default-model="{% if form_endpoint and form_endpoint.default_model %}true{% else %}false{% endif %}">
+
+            <section class="ai-config-step is-visible" data-ai-phase="1">
+                <div class="ai-config-step-head">
+                    <span class="ai-config-step-number">1</span>
+                    <div>
+                        <h3>Proveedor y conexión</h3>
+                        <p>Define el endpoint OpenAI-compatible y valida la API key sin guardarla todavía si es nueva.</p>
+                    </div>
+                </div>
+
+                <div class="ai-config-grid">
+                    <label class="ai-config-field">
+                        <span>Nombre visible</span>
                         <input class="form-input" name="name" value="{{ form_endpoint.name if form_endpoint else '' }}" required>
                     </label>
 
-                    <label class="form-label">
-                        Proveedor
+                    <label class="ai-config-field">
+                        <span>Proveedor</span>
                         <select class="form-input ai-provider-select" name="provider_kind">
                             {% for key, preset in provider_presets.items() %}
-                            <option value="{{ key }}"
-                                    data-base-url="{{ preset.base_url }}"
-                                    data-models-path="{{ preset.models_endpoint_path }}"
-                                    data-chat-path="{{ preset.chat_endpoint_path }}"
-                                    {% if form_endpoint and form_endpoint.provider_kind == key %}selected{% endif %}>
-                                {{ preset.label }}
-                            </option>
+                            <option value="{{ key }}" data-base-url="{{ preset.base_url }}" data-models-path="{{ preset.models_endpoint_path }}" data-chat-path="{{ preset.chat_endpoint_path }}" {% if form_endpoint and form_endpoint.provider_kind == key %}selected{% endif %}>{{ preset.label }}</option>
                             {% endfor %}
                         </select>
                     </label>
+                </div>
 
-                    <label class="form-label">
-                        Base URL
-                        <input class="form-input ai-base-url" name="base_url" value="{{ form_endpoint.base_url if form_endpoint else provider_presets.generic.base_url }}" required>
+                <label class="ai-config-field">
+                    <span>Base URL</span>
+                    <input class="form-input ai-base-url" name="base_url" value="{{ form_endpoint.base_url if form_endpoint else provider_presets.generic.base_url }}" required>
+                </label>
+
+                <div class="ai-config-grid">
+                    <label class="ai-config-field">
+                        <span>Endpoint modelos</span>
+                        <input class="form-input ai-models-path" name="models_endpoint_path" value="{{ form_endpoint.models_endpoint_path if form_endpoint else '/models' }}" required>
                     </label>
+                    <label class="ai-config-field">
+                        <span>Endpoint chat</span>
+                        <input class="form-input ai-chat-path" name="chat_endpoint_path" value="{{ form_endpoint.chat_endpoint_path if form_endpoint else '/chat/completions' }}" required>
+                    </label>
+                </div>
 
-                    <div class="info-grid">
-                        <label class="form-label">
-                            Endpoint modelos
-                            <input class="form-input ai-models-path" name="models_endpoint_path" value="{{ form_endpoint.models_endpoint_path if form_endpoint else '/models' }}" required>
-                        </label>
-                        <label class="form-label">
-                            Endpoint chat
-                            <input class="form-input ai-chat-path" name="chat_endpoint_path" value="{{ form_endpoint.chat_endpoint_path if form_endpoint else '/chat/completions' }}" required>
-                        </label>
+                <label class="ai-config-field">
+                    <span>API key</span>
+                    <input class="form-input ai-api-key" type="password" name="api_key" autocomplete="new-password" placeholder="{% if form_endpoint and form_endpoint.api_key_masked %}{{ form_endpoint.api_key_masked }}{% else %}No configurada{% endif %}">
+                    <small>{% if form_endpoint and form_endpoint.api_key_masked %}Existe una API key cifrada. Deja vacío para conservarla.{% else %}Nunca se muestra ni guarda en claro.{% endif %}</small>
+                </label>
+
+                <div class="ai-config-actions">
+                    <button class="primary-button ai-validate-key-button" type="button" data-loading-text="Validando...">Validar API key</button>
+                    <span class="ai-operation-result" role="status"></span>
+                </div>
+            </section>
+
+            <section class="ai-config-step" data-ai-phase="2">
+                <div class="ai-config-step-head">
+                    <span class="ai-config-step-number">2</span>
+                    <div>
+                        <h3>Selección de modelo</h3>
+                        <p>Elige un modelo detectado o escribe uno manual si el proveedor no devuelve la lista.</p>
                     </div>
+                </div>
 
-                    <label class="form-label">
-                        API key
-                        <input class="form-input ai-api-key" type="password" name="api_key" autocomplete="new-password" placeholder="{% if form_endpoint and form_endpoint.api_key_masked %}{{ form_endpoint.api_key_masked }}{% else %}No configurada{% endif %}">
-                        <small>Nunca se muestra ni guarda en claro. Deja vacío para conservar la existente.</small>
-                    </label>
-
-                    <label class="form-label">
-                        Buscar modelo
+                <div class="ai-config-model-tools">
+                    <label class="ai-config-field">
+                        <span>Buscar modelo</span>
                         <input class="form-input ai-model-filter" placeholder="Buscar modelo..." data-target-select="ai-model-select">
                     </label>
+                    <button class="logout-button ai-preview-models-button" type="button" data-loading-text="Obteniendo...">Obtener modelos</button>
+                </div>
 
-                    <label class="form-label">
-                        Modelo detectado
-                        <select class="form-input ai-model-select" id="ai-model-select" name="default_model" size="8" data-selected-model="{{ form_endpoint.default_model or '' if form_endpoint else '' }}">
-                            {% for model in models %}
-                            <option value="{{ model.model_id }}"
-                                    data-owned-by="{{ model.owned_by or '' }}"
-                                    data-context="{{ model.context_length or '' }}"
-                                    data-type="{{ model.model_type or '' }}"
-                                    data-pricing="{{ model.pricing_json }}"
-                                    {% if form_endpoint and form_endpoint.default_model == model.model_id %}selected{% endif %}>
-                                {{ model.model_id }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                        <small class="ai-model-meta">Selecciona un modelo para ver metadatos.</small>
-                    </label>
+                <div class="ai-config-model-empty {% if models %}is-hidden{% endif %}">No hay modelos detectados todavía. Valida la API key, obtén modelos o introduce un modelo manual.</div>
 
-                    <label class="form-label">
-                        Modelo manual
-                        <input class="form-input" name="manual_model" value="{% if form_endpoint and form_endpoint.default_model and not models %}{{ form_endpoint.default_model }}{% endif %}" placeholder="modelo/manual-si-no-aparece">
-                    </label>
+                <label class="ai-config-field">
+                    <span>Modelo detectado</span>
+                    <select class="form-input ai-model-select" id="ai-model-select" name="default_model" data-selected-model="{{ form_endpoint.default_model or '' if form_endpoint else '' }}">
+                        <option value="">Selecciona un modelo</option>
+                        {% for model in models %}
+                        <option value="{{ model.model_id }}" data-owned-by="{{ model.owned_by or '' }}" data-context="{{ model.context_length or '' }}" data-type="{{ model.model_type or '' }}" data-free="{% if model.is_free_hint %}true{% else %}false{% endif %}" data-pricing='{{ model.pricing_json | tojson }}' {% if form_endpoint and form_endpoint.default_model == model.model_id %}selected{% endif %}>{{ model.model_id }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
 
-                    <div class="info-grid">
-                        <label class="form-label">
-                            Timeout segundos
-                            <input class="form-input" type="number" name="timeout_seconds" min="1" max="600" value="{{ form_endpoint.timeout_seconds if form_endpoint else 60 }}">
-                        </label>
-                        <label class="form-label">
-                            Temperature
-                            <input class="form-input" type="number" name="temperature" min="0" max="2" step="0.1" value="{{ form_endpoint.temperature if form_endpoint else 0.2 }}">
-                        </label>
-                        <label class="form-label">
-                            Top P
-                            <input class="form-input" type="number" name="top_p" min="0" max="1" step="0.05" value="{{ form_endpoint.top_p if form_endpoint else 1.0 }}">
-                        </label>
-                        <label class="form-label">
-                            Max tokens
-                            <input class="form-input" type="number" name="max_tokens" min="1" value="{{ form_endpoint.max_tokens if form_endpoint else 1024 }}">
-                        </label>
+                <label class="ai-config-field">
+                    <span>Modelo manual</span>
+                    <input class="form-input ai-manual-model" name="manual_model" value="{% if form_endpoint and form_endpoint.default_model and not models %}{{ form_endpoint.default_model }}{% endif %}" placeholder="modelo/manual-si-no-aparece">
+                </label>
+
+                <div class="ai-config-model-meta ai-model-meta">Selecciona un modelo para ver metadatos.</div>
+            </section>
+
+            <section class="ai-config-step" data-ai-phase="3">
+                <div class="ai-config-step-head">
+                    <span class="ai-config-step-number">3</span>
+                    <div>
+                        <h3>Configuración del modelo</h3>
+                        <p>Ajusta parámetros de prueba y límites internos antes de validar.</p>
                     </div>
+                </div>
 
-                    <div class="info-grid">
-                        <label class="form-label checkbox-label"><input type="checkbox" name="enable_thinking" value="1" {% if form_endpoint and form_endpoint.enable_thinking %}checked{% endif %}> Enable thinking</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="is_active" value="1" {% if not form_endpoint or form_endpoint.is_active %}checked{% endif %}> Activo</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="is_default" value="1" {% if form_endpoint and form_endpoint.is_default %}checked{% endif %}> Predeterminado</label>
+                <div class="ai-config-grid">
+                    <label class="ai-config-field"><span>Timeout segundos</span><input class="form-input" type="number" name="timeout_seconds" min="1" max="600" value="{{ form_endpoint.timeout_seconds if form_endpoint else 60 }}"></label>
+                    <label class="ai-config-field"><span>Temperature</span><input class="form-input" type="number" name="temperature" min="0" max="2" step="0.1" value="{{ form_endpoint.temperature if form_endpoint else 0.2 }}"></label>
+                    <label class="ai-config-field"><span>Top P</span><input class="form-input" type="number" name="top_p" min="0" max="1" step="0.05" value="{{ form_endpoint.top_p if form_endpoint else 1.0 }}"></label>
+                    <label class="ai-config-field"><span>Max tokens</span><input class="form-input" type="number" name="max_tokens" min="1" value="{{ form_endpoint.max_tokens if form_endpoint else 1024 }}"></label>
+                </div>
+
+                <div class="ai-config-grid">
+                    <label class="ai-config-check"><input type="checkbox" name="enable_thinking" value="1" {% if form_endpoint and form_endpoint.enable_thinking %}checked{% endif %}> Enable thinking</label>
+                    <label class="ai-config-check"><input type="checkbox" name="is_active" value="1" {% if not form_endpoint or form_endpoint.is_active %}checked{% endif %}> Activo</label>
+                    <label class="ai-config-check"><input type="checkbox" name="is_default" value="1" {% if form_endpoint and form_endpoint.is_default %}checked{% endif %}> Predeterminado</label>
+                </div>
+
+                <label class="ai-config-field"><span>Límite diario interno</span><input class="form-input" type="number" name="daily_limit" min="0" value="{{ form_endpoint.daily_limit or '' if form_endpoint else '' }}"></label>
+                <label class="ai-config-field"><span>Notas de cuota gratuita</span><textarea class="form-input" name="free_quota_notes" rows="3">{{ form_endpoint.free_quota_notes or '' if form_endpoint else '' }}</textarea></label>
+
+                <details class="ai-config-details">
+                    <summary>Parámetros avanzados</summary>
+                    <label class="ai-config-field"><span>Cabeceras adicionales JSON</span><textarea class="form-input" name="extra_headers_json" rows="3">{{ (form_endpoint.extra_headers_json if form_endpoint else {}) | tojson }}</textarea><small>No incluir Authorization, tokens ni secretos. OpenRouter puede usar X-Title.</small></label>
+                    <label class="ai-config-field"><span>Política de reintentos JSON</span><textarea class="form-input" name="retry_policy_json" rows="4">{{ (form_endpoint.retry_policy_json if form_endpoint else {"max_retries":1,"retry_on":["timeout","connection_error","rate_limited"],"do_not_retry_on":["auth_error","quota_exceeded","model_not_found","invalid_request"]}) | tojson }}</textarea></label>
+                </details>
+            </section>
+
+            <section class="ai-config-step" data-ai-phase="4">
+                <div class="ai-config-step-head">
+                    <span class="ai-config-step-number">4</span>
+                    <div>
+                        <h3>Validación parametrizada</h3>
+                        <p>Envía una prueba técnica mínima. No se envía contenido real de correos, hilos ni tickets.</p>
                     </div>
+                </div>
 
-                    <label class="form-label">
-                        Límite diario interno
-                        <input class="form-input" type="number" name="daily_limit" min="0" value="{{ form_endpoint.daily_limit or '' if form_endpoint else '' }}">
-                    </label>
-
-                    <label class="form-label">
-                        Notas de cuota gratuita
-                        <textarea class="form-input" name="free_quota_notes" rows="3">{{ form_endpoint.free_quota_notes or '' if form_endpoint else '' }}</textarea>
-                    </label>
-
-                    <label class="form-label">
-                        Cabeceras adicionales JSON
-                        <textarea class="form-input" name="extra_headers_json" rows="3">{{ (form_endpoint.extra_headers_json if form_endpoint else {}) | tojson }}</textarea>
-                        <small>No incluir Authorization, tokens ni secretos. OpenRouter puede usar X-Title.</small>
-                    </label>
-
-                    <label class="form-label">
-                        Política de reintentos JSON
-                        <textarea class="form-input" name="retry_policy_json" rows="4">{{ (form_endpoint.retry_policy_json if form_endpoint else {"max_retries":1,"retry_on":["timeout","connection_error","rate_limited"],"do_not_retry_on":["auth_error","quota_exceeded","model_not_found","invalid_request"]}) | tojson }}</textarea>
-                    </label>
-
-                    <div class="info-grid">
-                        <button class="primary-button ai-preview-models-button" type="button" data-endpoint-id="{{ form_endpoint.id if form_endpoint else '' }}" data-loading-text="Obteniendo modelos...">Obtener modelos</button>
-                        <button class="primary-button ai-preview-validate-button" type="button" data-endpoint-id="{{ form_endpoint.id if form_endpoint else '' }}" data-loading-text="Validando...">Validar modelo</button>
-                    </div>
-                    <p class="pane-empty-text ai-operation-result" role="status"></p>
-
+                <div class="ai-config-actions">
+                    <button class="primary-button ai-preview-validate-button" type="button" data-loading-text="Validando...">Validar modelo</button>
                     <button class="primary-button" type="submit">Guardar endpoint</button>
-                </form>
-            </section>
-
-            {% if selected_endpoint %}
-            <section class="email-body-card">
-                <h3 style="margin-top: 0;">Acciones técnicas</h3>
-                <div class="info-grid">
-                    <form class="ai-saved-discover-form" method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/discover-models">
-                        <button class="primary-button" type="submit" data-loading-text="Obteniendo modelos...">Obtener modelos</button>
-                    </form>
-                    <form class="ai-saved-validate-form" method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/validate-model">
-                        <input class="ai-validate-model-id" type="hidden" name="model_id" value="{{ selected_endpoint.default_model or '' }}">
-                        <button class="primary-button" type="submit" data-loading-text="Validando...">Validar modelo</button>
-                    </form>
-                    <form method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/set-default">
-                        <button class="logout-button" type="submit">Predeterminar</button>
-                    </form>
-                    <form method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/disable">
-                        <button class="logout-button" type="submit">{% if selected_endpoint.is_active %}Desactivar{% else %}Activar{% endif %}</button>
-                    </form>
+                    {% if selected_endpoint %}
+                    <button class="logout-button" type="submit" form="ai-set-default-form">Predeterminar</button>
+                    <button class="logout-button" type="submit" form="ai-toggle-form">{% if selected_endpoint.is_active %}Desactivar{% else %}Activar{% endif %}</button>
+                    {% endif %}
                 </div>
-            </section>
 
-            <section class="email-body-card">
-                <h3 style="margin-top: 0;">Estado de validación</h3>
-                <div class="info-grid">
-                    <div class="info-card">
-                        <div class="info-label">Último estado</div>
-                        <div class="info-value">{{ selected_endpoint.last_validation_status or "No validado" }}</div>
-                    </div>
-                    <div class="info-card">
-                        <div class="info-label">Error</div>
-                        <div class="info-value">{{ selected_endpoint.last_validation_error_type or "Sin error" }}</div>
-                    </div>
-                    <div class="info-card">
-                        <div class="info-label">Última validación</div>
-                        <div class="info-value">{{ selected_endpoint.last_validation_at or "No disponible" }}</div>
-                    </div>
-                </div>
-                {% if selected_endpoint.last_validation_error_message %}
-                <p class="pane-empty-text">{{ selected_endpoint.last_validation_error_message }}</p>
-                {% endif %}
+                <div class="ai-config-validation" data-ai-validation-result><span class="ai-config-muted">Sin validaciones en esta sesión.</span></div>
             </section>
+        </form>
 
-            <section class="email-body-card">
-                <h3 style="margin-top: 0;">Histórico técnico</h3>
-                {% if validation_logs %}
-                <pre class="code-box">{% for log in validation_logs %}#{{ log.id }} {{ log.operation_type }} · {{ log.success }} · {{ log.error_type or "ok" }} · {{ log.latency_ms or "-" }} ms · thinking={{ log.thinking_detected }} · json={{ log.strict_json_ok }}
-{% endfor %}</pre>
-                {% else %}
-                <p class="pane-empty-text">Sin validaciones técnicas registradas.</p>
-                {% endif %}
-            </section>
+        {% if selected_endpoint %}
+        <form id="ai-set-default-form" method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/set-default"></form>
+        <form id="ai-toggle-form" method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/disable"></form>
+        <section class="ai-config-history">
+            <div class="ai-config-step-head">
+                <span class="ai-config-step-number">H</span>
+                <div><h3>Histórico técnico</h3><p>Últimas validaciones técnicas registradas sin API keys.</p></div>
+            </div>
+            {% if validation_logs %}
+            <div class="ai-config-log-list">
+                {% for log in validation_logs %}
+                <div class="ai-config-log-row"><span>#{{ log.id }}</span><span>{{ log.operation_type }}</span><span>{{ log.error_type or "ok" }}</span><span>{{ log.latency_ms or "-" }} ms</span><span>thinking={{ log.thinking_detected }}</span><span>json={{ log.strict_json_ok }}</span></div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="ai-config-muted">Sin validaciones técnicas registradas.</p>
             {% endif %}
-        </div>
+        </section>
+        {% endif %}
     </section>
 </main>
 {% endblock %}

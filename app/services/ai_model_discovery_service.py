@@ -344,11 +344,13 @@ def validate_model(db: Session, endpoint_id: int, model_id: str | None = None) -
             {"role": "system", "content": "Responde exclusivamente con JSON válido, sin markdown."},
             {"role": "user", "content": 'Devuelve exactamente este JSON: {"ok":true}'},
         ],
-        "temperature": 0.2,
-        "max_tokens": 64,
+        "temperature": float(endpoint.get("temperature") if endpoint.get("temperature") is not None else 0.2),
+        "max_tokens": int(endpoint.get("max_tokens") or 64),
     }
     if endpoint.get("top_p") is not None:
         payload["top_p"] = endpoint["top_p"]
+    if endpoint.get("enable_thinking"):
+        payload["enable_thinking"] = True
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **(endpoint.get("extra_headers_json") or {})}
     start = time.monotonic()
@@ -503,11 +505,13 @@ def validate_model_preview(payload: dict[str, Any], model_id: str | None = None)
             {"role": "system", "content": "Responde exclusivamente con JSON válido, sin markdown."},
             {"role": "user", "content": 'Devuelve exactamente este JSON: {"ok":true}'},
         ],
-        "temperature": 0.2,
-        "max_tokens": 64,
+        "temperature": float(payload.get("temperature") if payload.get("temperature") is not None else 0.2),
+        "max_tokens": int(payload.get("max_tokens") or 64),
     }
     if endpoint.get("top_p") is not None:
         request_payload["top_p"] = endpoint["top_p"]
+    if payload.get("enable_thinking"):
+        request_payload["enable_thinking"] = True
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", **(endpoint.get("extra_headers_json") or {})}
     start = time.monotonic()
