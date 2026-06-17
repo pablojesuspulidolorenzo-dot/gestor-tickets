@@ -140,7 +140,7 @@
                 <div class="timeline-item">
                     <div class="timeline-title">{{ email.subject or "(Sin asunto)" }}</div>
                     <div class="timeline-meta">
-                        {{ (email.sent_at or "")[:16] or "Sin fecha" }} · {{ email.from_email or "Sin remitente" }}
+                        {{ (email.sent_at | string)[:16] if email.sent_at else "Sin fecha" }} · {{ email.from_email or "Sin remitente" }}
                     </div>
 
                     {% if email.eml_attached %}
@@ -178,7 +178,7 @@
                         {% endif %}
                     </div>
                     <div class="timeline-meta">
-                        {{ (op.created_at or "")[:16] }} · HTTP {{ op.response_status_code or "N/D" }}
+                        {{ (op.created_at | string)[:16] if op.created_at else "N/D" }} · HTTP {{ op.response_status_code or "N/D" }}
                     </div>
                     {% if op.error_message %}
                     <p class="pane-empty-text">{{ op.error_message }}</p>

@@ -98,7 +98,7 @@
                     </div>
                     <div class="info-card">
                         <div class="info-label">Última validación GLPI</div>
-                        <div class="info-value">{{ (account.last_glpi_validation_at or "No disponible")[:16] }}</div>
+                        <div class="info-value">{{ (account.last_glpi_validation_at | string)[:16] if account.last_glpi_validation_at else "No disponible" }}</div>
                     </div>
                     <div class="info-card">
                         <div class="info-label">Ingesta habilitada</div>
@@ -150,7 +150,7 @@
                     </div>
                     <div class="info-card">
                         <div class="info-label">Última validación</div>
-                        <div class="info-value">{{ (account.imap_last_validated_at or "No disponible")[:16] }}</div>
+                        <div class="info-value">{{ (account.imap_last_validated_at | string)[:16] if account.imap_last_validated_at else "No disponible" }}</div>
                     </div>
                 </div>
                 <div class="ai-config-actions form-actions">
