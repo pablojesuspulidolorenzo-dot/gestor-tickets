@@ -7,7 +7,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 ## Estado Actual
 
 - Ruta del proyecto en servidor: `/var/www/vhosts/gestor-tickets.es/docker/`
-- Version actual de la app: `0.1.46`
+- Version actual de la app: `0.1.47`
 - Stack: FastAPI, Jinja2, HTMX, PostgreSQL 17, GLPI, MariaDB, IMAP, Docker Compose
 - Esquema PostgreSQL principal: `gestor_tickets`
 - Archivo SQL de referencia: `gestor_tickets_v2_schema_postgresql17_sin_triggers.sql`
@@ -404,7 +404,7 @@ Fallback para secciones definidas en `SECTION_DEFINITIONS`: `tickets`, `accounts
 - `session_auth_service.py`: autenticacion web GLPI/local.
 - `collaborator_service.py`: colaboradores y permisos.
 - `ai_settings_service.py`: persistencia IA y cifrado de API keys.
-- `ai_model_discovery_service.py`: `/models`, `/chat/completions`, clasificacion de errores, limpieza de `<thought>...</thought>` y extraccion de JSON de respuestas no estrictas (markdown). Funcion `_parse_llm_json` reutilizable en todas las llamadas al modelo.
+- `ai_model_discovery_service.py`: `/models`, `/chat/completions`, clasificacion de errores, limpieza de `<thought>...</thought>` y extraccion de JSON de respuestas no estrictas (markdown). Funcion `_parse_llm_json` reutilizable. Constante `FALLBACK_ERROR_TYPES` para logica de fallback entre endpoints por prioridad.
 - `audit_service.py`: auditoria.
 
 ## Reglas IMAP Obligatorias

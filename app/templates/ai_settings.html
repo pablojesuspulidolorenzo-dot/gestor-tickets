@@ -41,15 +41,26 @@
         <div class="ai-config-endpoints">
             {% if endpoints %}
                 {% for endpoint in endpoints %}
-                <a class="ai-config-endpoint {% if selected_endpoint and endpoint.id == selected_endpoint.id %}is-selected{% endif %}" href="/settings/ai?endpoint_id={{ endpoint.id }}">
-                    <div class="ai-config-endpoint-top">
-                        <span class="ai-config-endpoint-name">{{ endpoint.name }}</span>
-                        <span class="ai-config-status {% if endpoint.is_active %}is-ok{% else %}is-muted{% endif %}">{% if endpoint.is_active %}Activo{% else %}Inactivo{% endif %}</span>
+                <div class="ai-endpoint-card">
+                    <a class="ai-config-endpoint {% if selected_endpoint and endpoint.id == selected_endpoint.id %}is-selected{% endif %}" href="/settings/ai?endpoint_id={{ endpoint.id }}">
+                        <div class="ai-config-endpoint-top">
+                            <span class="ai-config-endpoint-name">{{ endpoint.name }}</span>
+                            <span class="ai-config-status {% if endpoint.is_active %}is-ok{% else %}is-muted{% endif %}">{% if endpoint.is_active %}Activo{% else %}Inactivo{% endif %}</span>
+                        </div>
+                        <div class="ai-config-endpoint-model">{{ endpoint.default_model or "Sin modelo seleccionado" }}</div>
+                        <div class="ai-config-endpoint-url" title="{{ endpoint.base_url }}">{{ endpoint.provider_kind }} · {{ endpoint.base_url }}</div>
+                        {% if endpoint.is_default %}<span class="ai-config-status is-default">Predeterminado</span>{% endif %}
+                    </a>
+                    <div class="ai-endpoint-order-controls">
+                        <form method="post" action="/settings/ai/endpoints/{{ endpoint.id }}/move-up">
+                            <button type="submit" class="ai-order-btn" title="Subir prioridad">↑</button>
+                        </form>
+                        <span class="ai-priority-badge">#{{ loop.index }}</span>
+                        <form method="post" action="/settings/ai/endpoints/{{ endpoint.id }}/move-down">
+                            <button type="submit" class="ai-order-btn" title="Bajar prioridad">↓</button>
+                        </form>
                     </div>
-                    <div class="ai-config-endpoint-model">{{ endpoint.default_model or "Sin modelo seleccionado" }}</div>
-                    <div class="ai-config-endpoint-url" title="{{ endpoint.base_url }}">{{ endpoint.provider_kind }} · {{ endpoint.base_url }}</div>
-                    {% if endpoint.is_default %}<span class="ai-config-status is-default">Predeterminado</span>{% endif %}
-                </a>
+                </div>
                 {% endfor %}
             {% else %}
                 <div class="ai-config-empty">
@@ -229,6 +240,7 @@
                     <button class="primary-button ai-preview-validate-button" type="button" data-loading-text="Validando...">Validar modelo</button>
                     <button class="primary-button" type="submit" data-ai-save-button disabled>Guardar endpoint</button>
                     {% if selected_endpoint %}
+                    <button class="logout-button" type="submit" form="ai-clone-form" title="Crea una copia con misma conexión y API key, sin modelo seleccionado">Clonar</button>
                     <button class="logout-button" type="submit" form="ai-set-default-form">Predeterminar</button>
                     <button class="logout-button" type="submit" form="ai-toggle-form">{% if selected_endpoint.is_active %}Desactivar{% else %}Activar{% endif %}</button>
                     {% endif %}
@@ -239,6 +251,7 @@
         </form>
 
         {% if selected_endpoint %}
+        <form id="ai-clone-form" method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/clone"></form>
         <form id="ai-set-default-form" method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/set-default"></form>
         <form id="ai-toggle-form" method="post" action="/settings/ai/endpoints/{{ selected_endpoint.id }}/disable"></form>
         <section class="ai-config-history">

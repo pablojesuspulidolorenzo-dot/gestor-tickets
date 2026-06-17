@@ -97,6 +97,7 @@ def _row_to_endpoint(row) -> dict:
     item["reasoning_effort"] = item.get("reasoning_effort") or "none"
     item["temperature"] = float(item["temperature"])
     item["top_p"] = float(item["top_p"])
+    item["priority_order"] = int(item.get("priority_order") or 0)
     return item
 
 
@@ -116,13 +117,13 @@ def _endpoint_select_sql() -> str:
             temperature, top_p, max_tokens, enable_thinking, reasoning_effort, daily_limit, free_quota_notes,
             retry_policy_json, extra_headers_json, last_models_sync_at, last_validation_at,
             last_validation_status, last_validation_error_type, last_validation_error_message,
-            created_at, updated_at
+            priority_order, created_at, updated_at
         FROM gestor_tickets.ai_llm_endpoints
     """
 
 
 def list_endpoints(db: Session) -> list[dict]:
-    rows = db.execute(text(_endpoint_select_sql() + " ORDER BY is_default DESC, is_active DESC, name ASC")).mappings().all()
+    rows = db.execute(text(_endpoint_select_sql() + " ORDER BY priority_order ASC, id ASC")).mappings().all()
     return [_row_to_endpoint(row) for row in rows]
 
 
@@ -198,19 +199,24 @@ def create_endpoint(db: Session, payload: dict[str, Any]) -> dict:
     if values["is_default"]:
         db.execute(text("UPDATE gestor_tickets.ai_llm_endpoints SET is_default = false WHERE is_default IS TRUE"))
 
+    max_priority = db.execute(
+        text("SELECT COALESCE(MAX(priority_order), 0) FROM gestor_tickets.ai_llm_endpoints")
+    ).scalar_one()
+    values["priority_order"] = int(max_priority) + 1
+
     endpoint_id = db.execute(
         text("""
             INSERT INTO gestor_tickets.ai_llm_endpoints (
                 name, provider_kind, base_url, models_endpoint_path, chat_endpoint_path,
                 api_key_ciphertext, default_model, is_active, is_default, timeout_seconds,
                 temperature, top_p, max_tokens, enable_thinking, reasoning_effort, daily_limit, free_quota_notes,
-                retry_policy_json, extra_headers_json, updated_at
+                retry_policy_json, extra_headers_json, priority_order, updated_at
             )
             VALUES (
                 :name, :provider_kind, :base_url, :models_endpoint_path, :chat_endpoint_path,
                 :api_key_ciphertext, :default_model, :is_active, :is_default, :timeout_seconds,
                 :temperature, :top_p, :max_tokens, :enable_thinking, :reasoning_effort, :daily_limit, :free_quota_notes,
-                CAST(:retry_policy_json AS jsonb), CAST(:extra_headers_json AS jsonb), now()
+                CAST(:retry_policy_json AS jsonb), CAST(:extra_headers_json AS jsonb), :priority_order, now()
             )
             RETURNING id
         """),
@@ -287,6 +293,100 @@ def set_default_endpoint(db: Session, endpoint_id: int) -> dict:
     )
     db.commit()
     return get_endpoint(db, endpoint_id)
+
+
+def clone_endpoint(db: Session, endpoint_id: int) -> dict:
+    row = db.execute(
+        text("SELECT * FROM gestor_tickets.ai_llm_endpoints WHERE id = :id"),
+        {"id": endpoint_id},
+    ).mappings().first()
+    if not row:
+        raise ValueError("Endpoint no encontrado.")
+    src = dict(row)
+
+    max_priority = db.execute(
+        text("SELECT COALESCE(MAX(priority_order), 0) FROM gestor_tickets.ai_llm_endpoints")
+    ).scalar_one()
+
+    new_id = db.execute(
+        text("""
+            INSERT INTO gestor_tickets.ai_llm_endpoints (
+                name, provider_kind, base_url, models_endpoint_path, chat_endpoint_path,
+                api_key_ciphertext, default_model, is_active, is_default, timeout_seconds,
+                temperature, top_p, max_tokens, enable_thinking, reasoning_effort, daily_limit,
+                free_quota_notes, retry_policy_json, extra_headers_json, priority_order, updated_at
+            )
+            VALUES (
+                :name, :provider_kind, :base_url, :models_endpoint_path, :chat_endpoint_path,
+                :api_key_ciphertext, NULL, false, false, :timeout_seconds,
+                :temperature, :top_p, :max_tokens, :enable_thinking, :reasoning_effort, :daily_limit,
+                :free_quota_notes, CAST(:retry_policy_json AS jsonb), CAST(:extra_headers_json AS jsonb),
+                :priority_order, now()
+            )
+            RETURNING id
+        """),
+        {
+            "name": f"{src['name']} (copia)",
+            "provider_kind": src["provider_kind"],
+            "base_url": src["base_url"],
+            "models_endpoint_path": src["models_endpoint_path"],
+            "chat_endpoint_path": src["chat_endpoint_path"],
+            "api_key_ciphertext": src.get("api_key_ciphertext"),
+            "timeout_seconds": src["timeout_seconds"],
+            "temperature": src["temperature"],
+            "top_p": src["top_p"],
+            "max_tokens": src["max_tokens"],
+            "enable_thinking": src["enable_thinking"],
+            "reasoning_effort": src.get("reasoning_effort") or "none",
+            "daily_limit": src.get("daily_limit"),
+            "free_quota_notes": src.get("free_quota_notes"),
+            "retry_policy_json": json.dumps(src.get("retry_policy_json") or DEFAULT_RETRY_POLICY, ensure_ascii=False),
+            "extra_headers_json": json.dumps(src.get("extra_headers_json") or {}, ensure_ascii=False),
+            "priority_order": int(max_priority) + 1,
+        },
+    ).scalar_one()
+    db.commit()
+    return get_endpoint(db, int(new_id))
+
+
+def move_endpoint(db: Session, endpoint_id: int, direction: str) -> None:
+    current_row = db.execute(
+        text("SELECT priority_order FROM gestor_tickets.ai_llm_endpoints WHERE id = :id"),
+        {"id": endpoint_id},
+    ).mappings().first()
+    if not current_row:
+        raise ValueError("Endpoint no encontrado.")
+    current_priority = current_row["priority_order"]
+
+    if direction == "up":
+        other = db.execute(
+            text("""
+                SELECT id, priority_order FROM gestor_tickets.ai_llm_endpoints
+                WHERE priority_order < :current ORDER BY priority_order DESC LIMIT 1
+            """),
+            {"current": current_priority},
+        ).mappings().first()
+    else:
+        other = db.execute(
+            text("""
+                SELECT id, priority_order FROM gestor_tickets.ai_llm_endpoints
+                WHERE priority_order > :current ORDER BY priority_order ASC LIMIT 1
+            """),
+            {"current": current_priority},
+        ).mappings().first()
+
+    if not other:
+        return
+
+    db.execute(
+        text("UPDATE gestor_tickets.ai_llm_endpoints SET priority_order = :po, updated_at = now() WHERE id = :id"),
+        {"po": other["priority_order"], "id": endpoint_id},
+    )
+    db.execute(
+        text("UPDATE gestor_tickets.ai_llm_endpoints SET priority_order = :po, updated_at = now() WHERE id = :id"),
+        {"po": current_priority, "id": other["id"]},
+    )
+    db.commit()
 
 
 def list_models(db: Session, endpoint_id: int) -> list[dict]:

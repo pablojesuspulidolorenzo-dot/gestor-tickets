@@ -549,7 +549,12 @@ a {
 .ai-config-hero p, .ai-config-step-head p { margin: 6px 0 0; color: var(--text-secondary); line-height: 1.55; }
 .ai-config-new-link { text-decoration: none; border: 1px solid var(--border); border-radius: 999px; padding: 8px 12px; color: var(--primary-dark); background: #fff; font-weight: 700; }
 .ai-config-endpoints { padding: 14px; display: grid; gap: 12px; min-width: 0; max-width: 100%; width: 100%; overflow: hidden; }
-.ai-config-endpoint { display: block; min-width: 0; max-width: 100%; width: 100%; text-decoration: none; border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: #fff; transition: border-color .15s ease, box-shadow .15s ease; overflow: hidden; }
+.ai-endpoint-card { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+.ai-config-endpoint { display: block; flex: 1; min-width: 0; text-decoration: none; border: 1px solid var(--border); border-radius: 14px; padding: 14px; background: #fff; transition: border-color .15s ease, box-shadow .15s ease; overflow: hidden; }
+.ai-endpoint-order-controls { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.ai-order-btn { background: none; border: 1px solid var(--border); border-radius: 8px; width: 26px; height: 26px; cursor: pointer; font-size: .9rem; color: var(--text-secondary); display: grid; place-items: center; transition: background .12s, border-color .12s; }
+.ai-order-btn:hover { background: #eff6ff; border-color: rgba(37,99,235,.3); color: var(--primary-dark); }
+.ai-priority-badge { font-size: .7rem; font-weight: 800; color: var(--text-muted); line-height: 1; }
 .ai-config-endpoint:hover, .ai-config-endpoint.is-selected { border-color: rgba(37,99,235,.28); box-shadow: 0 12px 26px rgba(15,23,42,.08); }
 .ai-config-endpoint.is-selected { background: #f8fbff; }
 .ai-config-endpoint-name, .ai-config-endpoint-model, .ai-config-endpoint-url { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

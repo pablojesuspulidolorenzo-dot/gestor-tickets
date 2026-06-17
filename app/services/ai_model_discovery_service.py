@@ -14,6 +14,10 @@ from app.services.ai_settings_service import get_endpoint_secret, list_models, _
 
 
 REASONING_EFFORT_VALUES = {"none", "low", "medium", "high"}
+
+# Errores que activan el fallback al siguiente endpoint por orden de prioridad.
+# Estos indican sobrecarga/cuota del proveedor, no un problema de configuración.
+FALLBACK_ERROR_TYPES = {"quota_exceeded", "rate_limited", "provider_error", "timeout", "connection_error"}
 THINKING_BLOCK_RE = re.compile(r"<thought>.*?</thought>", re.IGNORECASE | re.DOTALL)
 _MARKDOWN_JSON_RE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?\s*```", re.DOTALL | re.IGNORECASE)
 

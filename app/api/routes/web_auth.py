@@ -12,11 +12,13 @@ from app.core.versioning import get_version_metadata
 from app.services.ai_model_discovery_service import discover_models, validate_model
 from app.services.ai_settings_service import (
     PROVIDER_PRESETS,
+    clone_endpoint,
     create_endpoint,
     get_endpoint,
     list_endpoints,
     list_models,
     list_validation_logs,
+    move_endpoint,
     set_default_endpoint,
     set_endpoint_active,
     update_endpoint,
@@ -1261,6 +1263,51 @@ def ai_disable_endpoint_web(request: Request, endpoint_id: int, db: Session = De
     endpoint = get_endpoint(db, endpoint_id)
     set_endpoint_active(db, endpoint_id, not endpoint["is_active"])
     return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&message=active", status_code=303)
+
+
+@router.post("/settings/ai/endpoints/{endpoint_id}/clone", response_class=HTMLResponse)
+def ai_clone_endpoint_web(request: Request, endpoint_id: int, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    try:
+        new_endpoint = clone_endpoint(db, endpoint_id)
+        return RedirectResponse(url=f"/settings/ai?endpoint_id={new_endpoint['id']}&message=cloned", status_code=303)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}&error={str(exc)}", status_code=303)
+
+
+@router.post("/settings/ai/endpoints/{endpoint_id}/move-up", response_class=HTMLResponse)
+def ai_move_up_web(request: Request, endpoint_id: int, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    move_endpoint(db, endpoint_id, "up")
+    return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}", status_code=303)
+
+
+@router.post("/settings/ai/endpoints/{endpoint_id}/move-down", response_class=HTMLResponse)
+def ai_move_down_web(request: Request, endpoint_id: int, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    move_endpoint(db, endpoint_id, "down")
+    return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}", status_code=303)
 
 
 def _selected_permissions(values: set[str]) -> dict[str, bool]:
