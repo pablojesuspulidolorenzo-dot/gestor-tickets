@@ -1,81 +1,171 @@
 {% extends "base.html" %}
 
-{% block title %}Colaboradores - Gestor Tickets{% endblock %}
+{% block title %}Cuentas - Gestor Tickets{% endblock %}
 
 {% block content %}
-<header class="app-header">
-    <div class="logo-section">
-        <div class="logo-icon">GT</div>
-        <h1 class="logo-text">gestor-tickets</h1>
-    </div>
+{% include "partials/nav.html" %}
 
-    <nav class="top-nav">
-        <a href="/app" class="nav-btn">Panel</a>
-        <a href="/mailbox" class="nav-btn">Bandeja</a>
-        <a href="/threads" class="nav-btn">Hilos</a>
-        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
-        <a href="/ingestion" class="nav-btn">Ingesta</a>
-        <a href="/accounts" class="nav-btn active">Cuentas</a>
-        <a href="/settings" class="nav-btn">Configuración</a>
-        <a href="/settings/ai" class="nav-btn">Configuración IA</a>
-    </nav>
+<main class="ai-config-shell">
 
-    <div class="system-status">
-        <span class="version-text">{{ version.full }}</span>
-        <form method="post" action="/logout">
-            <button class="logout-button">Salir</button>
-        </form>
-    </div>
-</header>
-
-<main class="app-container">
-    <section class="thread-list-panel">
-        <div class="panel-header">
-            <h2 class="panel-title">Colaboradores</h2>
+    <!-- Sidebar: lista de colaboradores -->
+    <aside class="ai-config-sidebar">
+        <div class="ai-config-sidebar-header">
+            <div>
+                <p class="ai-config-kicker">Cuenta activa</p>
+                <h2>Colaboradores</h2>
+            </div>
+            <a class="ai-config-new-link" href="/accounts">+ Nuevo</a>
         </div>
 
-        <div class="message-scroll-area">
-            {% for collaborator in collaborators %}
-            <article class="message-item {% if collaborator.id == user.user_id %}active{% endif %}">
-                <div class="message-meta">
-                    <span class="message-sender">{{ collaborator.display_name }}</span>
-                    <span>{{ collaborator.status }}</span>
+        <div class="ai-config-endpoints">
+            {% for c in collaborators %}
+            <a class="ai-config-endpoint {% if selected and c.id == selected.id %}is-selected{% endif %}"
+               href="/accounts?collaborator_id={{ c.id }}">
+                <div class="ai-config-endpoint-top">
+                    <span class="ai-config-endpoint-name">{{ c.display_name }}</span>
+                    {% if c.status == "active" %}
+                    <span class="ai-config-status is-ok">Activo</span>
+                    {% else %}
+                    <span class="ai-config-status is-error">Inactivo</span>
+                    {% endif %}
                 </div>
-                <div class="message-subject">{{ collaborator.login_identifier }}</div>
-                <div class="message-snippet">{{ collaborator.role }} · {{ collaborator.auth_mode }}</div>
-            </article>
+                <div class="ai-config-endpoint-model">{{ c.login_identifier }}</div>
+                <div class="ai-config-endpoint-url">{{ c.role }} · {{ c.auth_mode }}</div>
+            </a>
             {% endfor %}
         </div>
-    </section>
+    </aside>
 
-    <section class="reading-ai-panel">
-        <div class="pane-empty-state">
-            <div class="pane-empty-icon">👥</div>
-            <h2 style="margin: 0 0 8px;">Gestión de colaboradores</h2>
-            <p class="pane-empty-text">
-                Los colaboradores locales acceden con usuario#cuenta y contraseña local cifrada como hash.
-            </p>
+    <!-- Panel principal -->
+    <section class="ai-config-main">
+        {% if error %}
+        <div class="scheduled-alert scheduled-alert-error ai-config-alert" style="margin:18px;">{{ error }}</div>
+        {% endif %}
+        {% if message == 'created' %}
+        <div class="scheduled-alert scheduled-alert-success ai-config-alert" style="margin:18px;">Colaborador creado correctamente.</div>
+        {% elif message == 'updated' %}
+        <div class="scheduled-alert scheduled-alert-success ai-config-alert" style="margin:18px;">Colaborador actualizado.</div>
+        {% elif message == 'status_changed' %}
+        <div class="scheduled-alert scheduled-alert-success ai-config-alert" style="margin:18px;">Estado del colaborador actualizado.</div>
+        {% endif %}
 
-            <section class="email-body-card">
-                <h3 style="margin-top: 0;">Crear colaborador local</h3>
-                <form method="post" action="/accounts/collaborators" class="form-stack">
-                    <label class="form-label">
+        {% if selected %}
+        <!-- Editar colaborador seleccionado -->
+        <div class="ai-config-form" style="border-bottom:1px solid var(--border); padding-bottom:18px;">
+            <h3 style="margin:0 0 2px;">{{ selected.display_name }}</h3>
+            <p class="ai-config-muted" style="margin:0;">{{ selected.login_identifier }}</p>
+        </div>
+
+        {% if selected.auth_mode == "local_collaborator" %}
+        <div class="ai-config-form">
+            <h4 style="margin:0 0 14px; color:var(--text-secondary);">Datos y permisos</h4>
+            <form method="post" action="/accounts/collaborators/{{ selected.id }}/update" class="form-stack">
+                <div class="ai-config-grid">
+                    <label class="form-label ai-config-field">
+                        Nombre visible
+                        <input class="form-input" name="display_name" value="{{ selected.display_name }}" required>
+                    </label>
+                    <label class="form-label ai-config-field">
+                        Email de contacto
+                        <input class="form-input" type="email" name="contact_email" value="{{ selected.contact_email or '' }}">
+                    </label>
+                    <label class="form-label ai-config-field">
+                        Rol
+                        <select class="form-input" name="role">
+                            {% for role in ["viewer", "collaborator", "technician", "admin"] %}
+                            <option value="{{ role }}" {% if selected.role == role %}selected{% endif %}>
+                                {% if role == "viewer" %}Solo lectura
+                                {% elif role == "collaborator" %}Colaborador
+                                {% elif role == "technician" %}Técnico
+                                {% elif role == "admin" %}Administrador
+                                {% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                </div>
+
+                <fieldset class="collab-perms-grid">
+                    <legend class="form-label" style="margin-bottom:10px;">Permisos</legend>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_read_account_mail" {% if selected.can_read_account_mail %}checked{% endif %}> Ver bandeja e hilos</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_link_tickets" {% if selected.can_link_tickets %}checked{% endif %}> Crear/editar hilos y vínculos</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_create_glpi_ticket" {% if selected.can_create_glpi_ticket %}checked{% endif %}> Crear tickets GLPI</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_update_glpi_ticket" {% if selected.can_update_glpi_ticket %}checked{% endif %}> Añadir seguimientos GLPI</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_manage_account_config" {% if selected.can_manage_account_config %}checked{% endif %}> Configurar ingesta y cuenta</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_manage_users" {% if selected.can_manage_users %}checked{% endif %}> Gestionar colaboradores</label>
+                </fieldset>
+
+                <div class="ai-config-actions form-actions">
+                    <button class="primary-button" type="submit">Guardar cambios</button>
+                </div>
+            </form>
+
+            <hr style="border:none; border-top:1px solid var(--border); margin:22px 0;">
+
+            <form method="post" action="/accounts/collaborators/{{ selected.id }}/status">
+                {% if selected.status == "active" %}
+                <input type="hidden" name="status" value="disabled">
+                <button class="logout-button" type="submit">Desactivar colaborador</button>
+                {% else %}
+                <input type="hidden" name="status" value="active">
+                <button class="primary-button" type="submit">Activar colaborador</button>
+                {% endif %}
+            </form>
+        </div>
+
+        {% else %}
+        <!-- Usuario GLPI: solo lectura -->
+        <div class="ai-config-form">
+            <h4 style="margin:0 0 14px; color:var(--text-secondary);">Usuario GLPI (solo lectura)</h4>
+            <div class="info-grid" style="margin-top:0;">
+                <div class="info-card">
+                    <div class="info-label">Rol</div>
+                    <div class="info-value">{{ selected.role }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Estado</div>
+                    <div class="info-value">{{ selected.status }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Modo de acceso</div>
+                    <div class="info-value">Usuario GLPI</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Email de contacto</div>
+                    <div class="info-value">{{ selected.contact_email or "—" }}</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <!-- Formulario de creación -->
+        <div class="ai-config-form" style="border-bottom:1px solid var(--border); padding-bottom:18px;">
+            <h3 style="margin:0 0 2px;">Crear colaborador local</h3>
+            <p class="ai-config-muted" style="margin:0;">Los colaboradores locales inician sesión con <code>usuario#cuenta</code> y contraseña cifrada.</p>
+        </div>
+
+        <div class="ai-config-form">
+            <form method="post" action="/accounts/collaborators" class="form-stack">
+                <div class="ai-config-grid">
+                    <label class="form-label ai-config-field">
                         Usuario local
+                        <small>Sin el sufijo #cuenta</small>
                         <input class="form-input" name="username_local" placeholder="tecnico1" required>
                     </label>
-                    <label class="form-label">
+                    <label class="form-label ai-config-field">
                         Nombre visible
                         <input class="form-input" name="display_name" required>
                     </label>
-                    <label class="form-label">
+                    <label class="form-label ai-config-field">
                         Email de contacto
                         <input class="form-input" type="email" name="contact_email">
                     </label>
-                    <label class="form-label">
+                    <label class="form-label ai-config-field">
                         Contraseña local
                         <input class="form-input" type="password" name="password" autocomplete="new-password" required>
                     </label>
-                    <label class="form-label">
+                    <label class="form-label ai-config-field">
                         Rol
                         <select class="form-input" name="role">
                             <option value="collaborator">Colaborador</option>
@@ -84,84 +174,25 @@
                             <option value="viewer">Solo lectura</option>
                         </select>
                     </label>
-
-                    <div class="info-grid">
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_read_account_mail" checked> Ver bandeja e hilos</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_link_tickets"> Crear/editar hilos y vínculos</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_create_glpi_ticket"> Crear tickets GLPI</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_update_glpi_ticket"> Añadir seguimientos GLPI</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_manage_account_config"> Configurar ingesta</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_manage_users"> Gestionar colaboradores</label>
-                    </div>
-
-                    <button class="primary-button" type="submit">Crear colaborador</button>
-                </form>
-            </section>
-
-            {% for collaborator in collaborators %}
-            <section class="email-body-card">
-                <h3 style="margin-top: 0;">{{ collaborator.display_name }}</h3>
-                <p class="pane-empty-text">{{ collaborator.login_identifier }}</p>
-
-                {% if collaborator.auth_mode == "local_collaborator" %}
-                <form method="post" action="/accounts/collaborators/{{ collaborator.id }}/update" class="form-stack">
-                    <label class="form-label">
-                        Nombre visible
-                        <input class="form-input" name="display_name" value="{{ collaborator.display_name }}" required>
-                    </label>
-                    <label class="form-label">
-                        Email de contacto
-                        <input class="form-input" type="email" name="contact_email" value="{{ collaborator.contact_email or '' }}">
-                    </label>
-                    <label class="form-label">
-                        Rol
-                        <select class="form-input" name="role">
-                            {% for role in ["viewer", "collaborator", "technician", "admin"] %}
-                            <option value="{{ role }}" {% if collaborator.role == role %}selected{% endif %}>{{ role }}</option>
-                            {% endfor %}
-                        </select>
-                    </label>
-
-                    <div class="info-grid">
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_read_account_mail" {% if collaborator.can_read_account_mail %}checked{% endif %}> Ver bandeja e hilos</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_link_tickets" {% if collaborator.can_link_tickets %}checked{% endif %}> Crear/editar hilos y vínculos</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_create_glpi_ticket" {% if collaborator.can_create_glpi_ticket %}checked{% endif %}> Crear tickets GLPI</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_update_glpi_ticket" {% if collaborator.can_update_glpi_ticket %}checked{% endif %}> Añadir seguimientos GLPI</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_manage_account_config" {% if collaborator.can_manage_account_config %}checked{% endif %}> Configurar ingesta</label>
-                        <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_manage_users" {% if collaborator.can_manage_users %}checked{% endif %}> Gestionar colaboradores</label>
-                    </div>
-
-                    <button class="primary-button" type="submit">Guardar permisos</button>
-                </form>
-
-                <form method="post" action="/accounts/collaborators/{{ collaborator.id }}/status" style="margin-top: 12px;">
-                    {% if collaborator.status == "active" %}
-                    <input type="hidden" name="status" value="disabled">
-                    <button class="logout-button" type="submit">Desactivar colaborador</button>
-                    {% else %}
-                    <input type="hidden" name="status" value="active">
-                    <button class="primary-button" type="submit">Activar colaborador</button>
-                    {% endif %}
-                </form>
-                {% else %}
-                <div class="info-grid">
-                    <div class="info-card">
-                        <div class="info-label">Rol</div>
-                        <div class="info-value">{{ collaborator.role }}</div>
-                    </div>
-                    <div class="info-card">
-                        <div class="info-label">Estado</div>
-                        <div class="info-value">{{ collaborator.status }}</div>
-                    </div>
-                    <div class="info-card">
-                        <div class="info-label">Gestión</div>
-                        <div class="info-value">Usuario GLPI</div>
-                    </div>
                 </div>
-                {% endif %}
-            </section>
-            {% endfor %}
+
+                <fieldset class="collab-perms-grid">
+                    <legend class="form-label" style="margin-bottom:10px;">Permisos iniciales</legend>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_read_account_mail" checked> Ver bandeja e hilos</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_link_tickets"> Crear/editar hilos y vínculos</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_create_glpi_ticket"> Crear tickets GLPI</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_update_glpi_ticket"> Añadir seguimientos GLPI</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_manage_account_config"> Configurar ingesta y cuenta</label>
+                    <label class="form-label checkbox-label"><input type="checkbox" name="permissions" value="can_manage_users"> Gestionar colaboradores</label>
+                </fieldset>
+
+                <div class="ai-config-actions form-actions">
+                    <button class="primary-button" type="submit">Crear colaborador</button>
+                </div>
+            </form>
         </div>
+        {% endif %}
     </section>
+
 </main>
 {% endblock %}

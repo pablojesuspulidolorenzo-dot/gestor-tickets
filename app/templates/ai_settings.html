@@ -3,34 +3,9 @@
 {% block title %}Configuración IA - Gestor Tickets{% endblock %}
 
 {% block content %}
-<header class="app-header">
-    <div class="logo-section">
-        <div class="logo-icon">GT</div>
-        <h1 class="logo-text">gestor-tickets</h1>
-    </div>
-
-    <nav class="top-nav">
-        <a href="/app" class="nav-btn">Panel</a>
-        <a href="/mailbox" class="nav-btn">Bandeja</a>
-        <a href="/threads" class="nav-btn">Hilos</a>
-        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
-        <a href="/ingestion" class="nav-btn">Ingesta</a>
-        <a href="/accounts" class="nav-btn">Cuentas</a>
-        <a href="/settings" class="nav-btn">Configuración</a>
-        <a href="/settings/ai" class="nav-btn active">Configuración IA</a>
-    </nav>
-
-    <div class="system-status">
-        <span class="version-text">{{ version.full }}</span>
-        <form method="post" action="/logout">
-            <button class="logout-button">Salir</button>
-        </form>
-    </div>
-</header>
-
-{% with active_ai_section="endpoints" %}
-{% include "partials/ai_subnav.html" %}
-{% endwith %}
+{% include "partials/nav.html" %}
+{% with active_settings_section="ai" %}{% include "partials/settings_subnav.html" %}{% endwith %}
+{% with active_ai_section="endpoints" %}{% include "partials/ai_subnav.html" %}{% endwith %}
 
 <main class="ai-config-shell">
     <aside class="ai-config-sidebar">

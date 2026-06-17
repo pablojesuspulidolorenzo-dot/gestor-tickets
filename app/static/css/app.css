@@ -675,3 +675,60 @@ a {
 .ai-versions-prompt-preview { padding: 0 12px 10px; }
 .ai-versions-prompt-preview details summary { font-size: .8rem; color: var(--text-muted); cursor: pointer; padding: 4px 0; }
 .ai-prompt-textarea { font-family: monospace; font-size: .82rem; resize: vertical; min-height: 120px; }
+
+/* ── GLPI Status & Priority Badges ──────────────────────────────── */
+.glpi-status-badge, .glpi-priority-badge {
+    display: inline-flex; align-items: center;
+    padding: 2px 10px; border-radius: 999px;
+    font-size: .78rem; font-weight: 750; border: 1px solid transparent;
+    white-space: nowrap;
+}
+/* Status */
+.glpi-st-1 { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }   /* Nuevo */
+.glpi-st-2 { background: #fff7ed; color: #9a3412; border-color: #fdba74; }   /* En proceso */
+.glpi-st-3 { background: #f5f3ff; color: #5b21b6; border-color: #c4b5fd; }  /* Planificado */
+.glpi-st-4 { background: #fef9c3; color: #854d0e; border-color: #fde047; }   /* Pendiente */
+.glpi-st-5 { background: #dcfce7; color: #166534; border-color: #86efac; }   /* Resuelto */
+.glpi-st-6 { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }   /* Cerrado */
+/* Priority / Urgency / Impact */
+.glpi-pr-1 { background: #f0fdf4; color: #166534; border-color: #86efac; }   /* Muy baja */
+.glpi-pr-2 { background: #dcfce7; color: #166534; border-color: #4ade80; }   /* Baja */
+.glpi-pr-3 { background: #fef9c3; color: #854d0e; border-color: #fde047; }   /* Media */
+.glpi-pr-4 { background: #ffedd5; color: #9a3412; border-color: #fdba74; }   /* Alta */
+.glpi-pr-5 { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }   /* Muy alta */
+.glpi-pr-6 { background: #7f1d1d; color: #fef2f2; border-color: #b91c1c; }   /* Mayor */
+/* Status value in stats panel */
+.glpi-st-num { font-weight: 900; font-size: 1.2rem; }
+
+/* ── Ticket Filter Bar ───────────────────────────────────────────── */
+.ticket-filter-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: #f8fafc; flex-wrap: wrap; }
+.ticket-filter-input { flex: 1; min-width: 120px; border: 1px solid var(--border); border-radius: 10px; padding: 7px 12px; font: inherit; font-size: .875rem; background: #fff; }
+.ticket-filter-select { border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; font: inherit; font-size: .875rem; background: #fff; cursor: pointer; }
+.ticket-filter-btn { padding: 7px 14px; border-radius: 10px; border: 0; background: var(--primary); color: #fff; font-weight: 700; font-size: .875rem; cursor: pointer; }
+.ticket-filter-btn:hover { background: var(--primary-dark); }
+.ticket-filter-clear { font-size: .82rem; color: var(--text-muted); text-decoration: none; padding: 4px 8px; border-radius: 8px; }
+.ticket-filter-clear:hover { background: #fee2e2; color: var(--danger); }
+.ticket-count-badge { background: var(--primary); color: #fff; border-radius: 999px; padding: 2px 10px; font-size: .8rem; font-weight: 800; }
+
+/* ── GLPI Operation History ──────────────────────────────────────── */
+.glpi-op-ok  { color: #16a34a; font-weight: 700; }
+.glpi-op-err { color: #dc2626; font-weight: 700; }
+.glpi-pass-panel { background: #fffbeb; border-color: #fde68a !important; }
+
+/* ── Collaborators Page ──────────────────────────────────────────── */
+.collab-perms-grid { border: none; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.collab-perms-grid legend { grid-column: span 2; }
+.checkbox-label { flex-direction: row; align-items: center; gap: 8px; font-weight: 600; }
+
+/* ── Home Quick Cards ────────────────────────────────────────────── */
+.home-quick-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: #fff; text-decoration: none; color: inherit; transition: border-color .15s, background .15s; }
+.home-quick-card:hover { border-color: rgba(37, 99, 235, .5); background: #eff6ff; }
+.home-quick-icon { font-size: 1.5rem; flex-shrink: 0; }
+.home-quick-title { font-weight: 800; font-size: .95rem; margin-bottom: 2px; }
+.home-quick-desc { font-size: .82rem; color: var(--text-muted); }
+
+/* ── Ingestion Run Badges ────────────────────────────────────────── */
+.ingestion-run-badge { display: inline-flex; padding: 1px 9px; border-radius: 999px; font-size: .75rem; font-weight: 750; border: 1px solid var(--border); background: #f1f5f9; color: var(--text-muted); }
+.ingestion-run-badge.is-ok { background: #dcfce7; color: #166534; border-color: #86efac; }
+.ingestion-run-badge.is-err { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.ingestion-run-badge.is-running { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }

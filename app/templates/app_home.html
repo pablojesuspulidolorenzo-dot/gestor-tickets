@@ -3,35 +3,12 @@
 {% block title %}Panel - Gestor Tickets{% endblock %}
 
 {% block content %}
-<header class="app-header">
-    <div class="logo-section">
-        <div class="logo-icon">GT</div>
-        <h1 class="logo-text">gestor-tickets</h1>
-    </div>
-
-    <nav class="top-nav">
-        <a href="/app" class="nav-btn active">Panel</a>
-        <a href="/mailbox" class="nav-btn">Bandeja</a>
-        <a href="/threads" class="nav-btn">Hilos</a>
-        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
-        <a href="/ingestion" class="nav-btn">Ingesta</a>
-        <a href="/accounts" class="nav-btn">Cuentas</a>
-        <a href="/settings" class="nav-btn">Configuración</a>
-        <a href="/settings/ai" class="nav-btn">Configuración IA</a>
-    </nav>
-
-    <div class="system-status">
-        <span class="version-text">{{ version.full }}</span>
-        <form method="post" action="/logout">
-            <button class="logout-button">Salir</button>
-        </form>
-    </div>
-</header>
+{% include "partials/nav.html" %}
 
 <main class="app-container">
     <section class="thread-list-panel">
         <div class="panel-header">
-            <h2 class="panel-title">Cuenta activa</h2>
+            <h2 class="panel-title">Sesión activa</h2>
         </div>
 
         <div class="message-scroll-area">
@@ -45,40 +22,68 @@
                     Modo de acceso: {{ user.auth_mode }}
                 </div>
             </article>
+
+            <div style="padding: 14px 0 0; display: grid; gap: 10px;">
+                <a href="/mailbox" class="home-quick-card">
+                    <span class="home-quick-icon">📥</span>
+                    <div>
+                        <div class="home-quick-title">Bandeja</div>
+                        <div class="home-quick-desc">Ver correos de la cuenta compartida</div>
+                    </div>
+                </a>
+                <a href="/threads" class="home-quick-card">
+                    <span class="home-quick-icon">🔗</span>
+                    <div>
+                        <div class="home-quick-title">Hilos operativos</div>
+                        <div class="home-quick-desc">Gestionar hilos y vínculos GLPI</div>
+                    </div>
+                </a>
+                <a href="/tickets" class="home-quick-card">
+                    <span class="home-quick-icon">🎫</span>
+                    <div>
+                        <div class="home-quick-title">Tickets GLPI</div>
+                        <div class="home-quick-desc">Consultar y operar tickets cacheados</div>
+                    </div>
+                </a>
+                {% if user.can_manage_account_config %}
+                <a href="/ingestion" class="home-quick-card">
+                    <span class="home-quick-icon">⚙️</span>
+                    <div>
+                        <div class="home-quick-title">Ingesta IMAP</div>
+                        <div class="home-quick-desc">Estado del scheduler y runs recientes</div>
+                    </div>
+                </a>
+                {% endif %}
+            </div>
         </div>
     </section>
 
     <section class="reading-ai-panel">
         <div class="pane-empty-state">
             <div class="pane-empty-icon">✅</div>
-            <h2 style="margin: 0 0 8px;">Sesión iniciada correctamente</h2>
+            <h2 style="margin: 0 0 8px;">Bienvenido, {{ user.display_name }}</h2>
             <p class="pane-empty-text">
-                Ya estás autenticado en el nuevo gestor. A partir de aquí iremos añadiendo bandeja,
-                hilos, relación con GLPI e IA.
+                Sesión iniciada en <strong>{{ user.account_email }}</strong>. Usa el menú superior o los accesos rápidos para navegar.
             </p>
 
             <div class="info-grid">
                 <div class="info-card">
-                    <div class="info-label">Usuario interno</div>
-                    <div class="info-value">{{ user.user_id }}</div>
+                    <div class="info-label">Usuario</div>
+                    <div class="info-value">{{ user.login_identifier }}</div>
                 </div>
                 <div class="info-card">
-                    <div class="info-label">Cuenta interna</div>
-                    <div class="info-value">{{ user.account_id }}</div>
+                    <div class="info-label">Rol</div>
+                    <div class="info-value">{{ user.role }}</div>
                 </div>
                 <div class="info-card">
                     <div class="info-label">Cuenta colaborativa</div>
                     <div class="info-value">{{ user.account_email }}</div>
                 </div>
                 <div class="info-card">
-                    <div class="info-label">Rol</div>
-                    <div class="info-value">{{ user.role }}</div>
+                    <div class="info-label">Versión</div>
+                    <div class="info-value">{{ version.full }}</div>
                 </div>
             </div>
-
-            <pre class="code-box">Login usado: {{ user.login_identifier }}
-Modo: {{ user.auth_mode }}
-Versión: {{ version.full }}</pre>
         </div>
     </section>
 </main>

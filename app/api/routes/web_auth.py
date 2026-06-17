@@ -68,6 +68,12 @@ from app.services.ai_prompt_service import (
     list_templates,
 )
 from app.services.ai_call_history_service import get_call_detail, list_call_history
+from app.services.account_settings_service import (
+    get_account_settings,
+    update_account_glpi,
+    update_account_imap,
+    update_account_info,
+)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="/app/templates")
@@ -619,6 +625,8 @@ def thread_synthesize_ai(
 @router.get("/tickets", response_class=HTMLResponse)
 def tickets_page(
     request: Request,
+    q: str | None = None,
+    status: str | None = None,
     db: Session = Depends(get_db),
 ):
     user = require_session_user(request)
@@ -629,10 +637,21 @@ def tickets_page(
     if denied:
         return denied
 
-    tickets = list_glpi_ticket_cache(
-        db,
-        account_id=int(user["account_id"]),
-    )
+    all_tickets = list_glpi_ticket_cache(db, account_id=int(user["account_id"]))
+
+    # Estadísticas por estado (sobre el total sin filtrar)
+    stats: dict[int, int] = {}
+    for t in all_tickets:
+        st = int(t["status"]) if t.get("status") else 0
+        stats[st] = stats.get(st, 0) + 1
+
+    # Aplicar filtros en Python (la lista ya está en memoria)
+    filtered = all_tickets
+    if status:
+        filtered = [t for t in filtered if str(t.get("status") or "") == status]
+    if q:
+        q_lower = q.lower()
+        filtered = [t for t in filtered if q_lower in (t.get("title") or "").lower()]
 
     return templates.TemplateResponse(
         request=request,
@@ -641,7 +660,11 @@ def tickets_page(
             request,
             user=user,
             active_section="tickets",
-            tickets=tickets,
+            tickets=filtered,
+            tickets_total=len(all_tickets),
+            tickets_stats=stats,
+            q=q or "",
+            status_filter=status or "",
         ),
     )
 
@@ -1535,7 +1558,13 @@ def _require_manage_users(user: dict):
 
 
 @router.get("/accounts", response_class=HTMLResponse)
-def accounts_page(request: Request, db: Session = Depends(get_db)):
+def accounts_page(
+    request: Request,
+    collaborator_id: int | None = None,
+    message: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+):
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
@@ -1546,6 +1575,8 @@ def accounts_page(request: Request, db: Session = Depends(get_db)):
         return denied
 
     collaborators = list_account_users(db, account_id=int(user["account_id"]))
+    selected = next((c for c in collaborators if c["id"] == collaborator_id), None) if collaborator_id else None
+
     return templates.TemplateResponse(
         request=request,
         name="accounts.html",
@@ -1554,7 +1585,9 @@ def accounts_page(request: Request, db: Session = Depends(get_db)):
             user=user,
             active_section="accounts",
             collaborators=collaborators,
-            error=None,
+            selected=selected,
+            message=message,
+            error=error,
         ),
     )
 
@@ -1594,7 +1627,7 @@ def accounts_create_collaborator(
     except ValueError:
         pass
 
-    return RedirectResponse(url="/accounts", status_code=303)
+    return RedirectResponse(url="/accounts?message=created", status_code=303)
 
 
 @router.post("/accounts/collaborators/{collaborator_id}/update", response_class=HTMLResponse)
@@ -1629,7 +1662,7 @@ def accounts_update_collaborator(
     except ValueError:
         pass
 
-    return RedirectResponse(url="/accounts", status_code=303)
+    return RedirectResponse(url=f"/accounts?collaborator_id={collaborator_id}&message=updated", status_code=303)
 
 
 @router.post("/accounts/collaborators/{collaborator_id}/status", response_class=HTMLResponse)
@@ -1658,7 +1691,129 @@ def accounts_set_collaborator_status(
     except ValueError:
         pass
 
-    return RedirectResponse(url="/accounts", status_code=303)
+    return RedirectResponse(url=f"/accounts?collaborator_id={collaborator_id}&message=status_changed", status_code=303)
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(
+    request: Request,
+    tab: str | None = None,
+    message: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_manage_account_config")
+    if denied:
+        return denied
+
+    active_tab = tab if tab in ("cuenta", "imap", "glpi") else "cuenta"
+    try:
+        account = get_account_settings(db, account_id=int(user["account_id"]))
+    except ValueError:
+        account = {}
+
+    return templates.TemplateResponse(
+        request=request,
+        name="settings.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="settings",
+            active_settings_section="cuenta",
+            tab=active_tab,
+            account=account,
+            message=message,
+            error=error,
+        ),
+    )
+
+
+@router.post("/settings/cuenta", response_class=HTMLResponse)
+def settings_update_cuenta(
+    request: Request,
+    display_name: str = Form(...),
+    notes: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_manage_account_config")
+    if denied:
+        return denied
+
+    try:
+        update_account_info(db, account_id=int(user["account_id"]), display_name=display_name, notes=notes)
+    except Exception as exc:
+        return RedirectResponse(url=f"/settings?error={exc}", status_code=303)
+    return RedirectResponse(url="/settings?message=saved", status_code=303)
+
+
+@router.post("/settings/imap", response_class=HTMLResponse)
+def settings_update_imap(
+    request: Request,
+    imap_host: str = Form(...),
+    imap_username: str = Form(...),
+    imap_password: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_manage_account_config")
+    if denied:
+        return denied
+
+    try:
+        update_account_imap(
+            db,
+            account_id=int(user["account_id"]),
+            imap_host=imap_host,
+            imap_username=imap_username,
+            imap_password=imap_password,
+        )
+    except Exception as exc:
+        return RedirectResponse(url=f"/settings?tab=imap&error={exc}", status_code=303)
+    return RedirectResponse(url="/settings?tab=imap&message=saved", status_code=303)
+
+
+@router.post("/settings/glpi", response_class=HTMLResponse)
+def settings_update_glpi(
+    request: Request,
+    glpi_instance_id: int = Form(...),
+    base_url: str = Form(...),
+    glpi_name: str = Form(...),
+    app_token: str | None = Form(None),
+    verify_tls: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_manage_account_config")
+    if denied:
+        return denied
+
+    try:
+        update_account_glpi(
+            db,
+            account_id=int(user["account_id"]),
+            glpi_instance_id=glpi_instance_id,
+            base_url=base_url,
+            glpi_name=glpi_name,
+            app_token=app_token,
+            verify_tls=bool(verify_tls),
+        )
+    except Exception as exc:
+        return RedirectResponse(url=f"/settings?tab=glpi&error={exc}", status_code=303)
+    return RedirectResponse(url="/settings?tab=glpi&message=saved", status_code=303)
 
 
 @router.get("/{section}", response_class=HTMLResponse)

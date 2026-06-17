@@ -2,60 +2,66 @@
 
 {% block title %}Tickets GLPI - Gestor Tickets{% endblock %}
 
+{% set glpi_status_map = {1: "Nuevo", 2: "En proceso", 3: "Planificado", 4: "Pendiente", 5: "Resuelto", 6: "Cerrado"} %}
+{% set glpi_priority_map = {1: "Muy baja", 2: "Baja", 3: "Media", 4: "Alta", 5: "Muy alta", 6: "Mayor"} %}
+
 {% block content %}
-<header class="app-header">
-    <div class="logo-section">
-        <div class="logo-icon">GT</div>
-        <h1 class="logo-text">gestor-tickets</h1>
-    </div>
-
-    <nav class="top-nav">
-        <a href="/app" class="nav-btn">Panel</a>
-        <a href="/mailbox" class="nav-btn">Bandeja</a>
-        <a href="/threads" class="nav-btn">Hilos</a>
-        <a href="/tickets" class="nav-btn active">Tickets GLPI</a>
-        <a href="/ingestion" class="nav-btn">Ingesta</a>
-        <a href="/accounts" class="nav-btn">Cuentas</a>
-        <a href="/settings" class="nav-btn">Configuración</a>
-        <a href="/settings/ai" class="nav-btn">Configuración IA</a>
-    </nav>
-
-    <div class="system-status">
-        <span class="version-text">{{ version.full }}</span>
-        <form method="post" action="/logout">
-            <button class="logout-button">Salir</button>
-        </form>
-    </div>
-</header>
+{% include "partials/nav.html" %}
 
 <main class="app-container">
     <section class="thread-list-panel">
         <div class="panel-header">
-            <h2 class="panel-title">Tickets GLPI cacheados</h2>
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+                <h2 class="panel-title">Tickets GLPI</h2>
+                <span class="ticket-count-badge">{{ tickets_total }}</span>
+            </div>
         </div>
+
+        <form method="get" action="/tickets" class="ticket-filter-bar">
+            <input class="ticket-filter-input" type="text" name="q"
+                   placeholder="Buscar por título…" value="{{ q or '' }}">
+            <select class="ticket-filter-select" name="status" onchange="this.form.submit()">
+                <option value="">Todos</option>
+                {% for num, label in glpi_status_map.items() %}
+                <option value="{{ num }}" {% if status_filter == num|string %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button class="ticket-filter-btn" type="submit">Filtrar</button>
+            {% if q or status_filter %}
+            <a href="/tickets" class="ticket-filter-clear">× Limpiar</a>
+            {% endif %}
+        </form>
 
         <div class="message-scroll-area">
             {% if tickets %}
                 {% for ticket in tickets %}
+                {% set st = ticket.status | int if ticket.status else 0 %}
+                {% set pr = ticket.priority | int if ticket.priority else 0 %}
                 <a class="message-item mailbox-message-link" href="/tickets/{{ ticket.id }}">
                     <div class="message-meta">
-                        <span class="message-sender">Ticket GLPI #{{ ticket.glpi_ticket_id }}</span>
-                        <span>Estado {{ ticket.status or "?" }}</span>
+                        <span class="message-sender">GLPI #{{ ticket.glpi_ticket_id }}</span>
+                        <span class="glpi-status-badge glpi-st-{{ st }}">{{ glpi_status_map.get(st, "?") }}</span>
                     </div>
                     <div class="message-subject">{{ ticket.title or "(Sin título)" }}</div>
-                    <div class="message-snippet">
-                        {{ ticket.thread_count }} hilo(s) · {{ ticket.email_count }} correo(s)
+                    <div class="message-snippet" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">
+                        <span class="glpi-priority-badge glpi-pr-{{ pr }}">{{ glpi_priority_map.get(pr, "?") }}</span>
+                        <span>{{ ticket.thread_count }} hilo(s)</span>
+                        <span>{{ ticket.email_count }} correo(s)</span>
                     </div>
-                    <div class="message-snippet">
-                        Prioridad {{ ticket.priority or "?" }} · Urgencia {{ ticket.urgency or "?" }} · Impacto {{ ticket.impact or "?" }}
+                    <div class="message-snippet" style="margin-top:4px; font-size:.8rem;">
+                        Sync: {{ (ticket.last_sync_at or "")[:16] or "No disponible" }}
                     </div>
                 </a>
                 {% endfor %}
             {% else %}
-                <article class="message-item active">
-                    <div class="message-subject">No hay tickets GLPI cacheados</div>
+                <article class="message-item">
+                    <div class="message-subject">Sin resultados</div>
                     <div class="message-snippet">
+                        {% if q or status_filter %}
+                        No hay tickets que coincidan con los filtros.
+                        {% else %}
                         Crea un ticket desde el detalle de un hilo operativo.
+                        {% endif %}
                     </div>
                 </article>
             {% endif %}
@@ -65,27 +71,24 @@
     <section class="reading-ai-panel">
         <div class="pane-empty-state">
             <div class="pane-empty-icon">🎫</div>
-            <h2 style="margin: 0 0 8px;">Tickets GLPI relacionados</h2>
+            <h2 style="margin: 0 0 8px;">Tickets GLPI cacheados</h2>
             <p class="pane-empty-text">
-                Esta vista muestra los tickets GLPI cacheados en gestor-tickets y sus relaciones internas.
+                Selecciona un ticket de la lista para ver su detalle, añadir seguimientos GLPI o adjuntar correos como .eml.
             </p>
 
             <div class="info-grid">
+                {% for st_num, st_label in glpi_status_map.items() %}
+                {% set cnt = tickets_stats.get(st_num, 0) %}
+                {% if cnt > 0 %}
                 <div class="info-card">
-                    <div class="info-label">Cuenta</div>
-                    <div class="info-value">{{ user.account_email }}</div>
+                    <div class="info-label">{{ st_label }}</div>
+                    <div class="info-value glpi-st-num glpi-st-{{ st_num }}">{{ cnt }}</div>
                 </div>
+                {% endif %}
+                {% endfor %}
                 <div class="info-card">
-                    <div class="info-label">Tickets cacheados</div>
-                    <div class="info-value">{{ tickets|length }}</div>
-                </div>
-                <div class="info-card">
-                    <div class="info-label">Origen</div>
-                    <div class="info-value">GLPI API + caché local</div>
-                </div>
-                <div class="info-card">
-                    <div class="info-label">Versión</div>
-                    <div class="info-value">{{ version.full }}</div>
+                    <div class="info-label">Total cacheados</div>
+                    <div class="info-value">{{ tickets_total }}</div>
                 </div>
             </div>
         </div>

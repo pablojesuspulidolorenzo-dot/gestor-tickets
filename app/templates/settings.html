@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración - Gestor Tickets{% endblock %}
+
+{% block content %}
+{% include "partials/nav.html" %}
+{% with active_settings_section=tab %}{% include "partials/settings_subnav.html" %}{% endwith %}
+
+<main class="ai-config-shell">
+
+    <!-- Sidebar -->
+    <aside class="ai-config-sidebar">
+        <div class="ai-config-sidebar-header">
+            <div>
+                <p class="ai-config-kicker">{{ account.email }}</p>
+                <h2>Configuración</h2>
+            </div>
+        </div>
+
+        <div class="ai-config-endpoints">
+            <a class="ai-config-endpoint {% if tab == 'cuenta' %}is-selected{% endif %}" href="/settings">
+                <div class="ai-config-endpoint-top">
+                    <span class="ai-config-endpoint-name">Cuenta</span>
+                    <span class="ai-config-status {% if account.status == 'active' %}is-ok{% else %}is-error{% endif %}">
+                        {{ "Activa" if account.status == "active" else account.status }}
+                    </span>
+                </div>
+                <div class="ai-config-endpoint-url">Nombre visible y notas</div>
+            </a>
+            <a class="ai-config-endpoint {% if tab == 'imap' %}is-selected{% endif %}" href="/settings?tab=imap">
+                <div class="ai-config-endpoint-top">
+                    <span class="ai-config-endpoint-name">IMAP</span>
+                    {% if account.imap_host %}
+                    <span class="ai-config-status is-ok">Configurado</span>
+                    {% else %}
+                    <span class="ai-config-status is-muted">Sin configurar</span>
+                    {% endif %}
+                </div>
+                <div class="ai-config-endpoint-url">{{ account.imap_host or "—" }}</div>
+            </a>
+            <a class="ai-config-endpoint {% if tab == 'glpi' %}is-selected{% endif %}" href="/settings?tab=glpi">
+                <div class="ai-config-endpoint-top">
+                    <span class="ai-config-endpoint-name">GLPI</span>
+                    {% if account.glpi_base_url %}
+                    <span class="ai-config-status is-ok">Configurado</span>
+                    {% else %}
+                    <span class="ai-config-status is-muted">Sin configurar</span>
+                    {% endif %}
+                </div>
+                <div class="ai-config-endpoint-url">{{ account.glpi_base_url or "—" }}</div>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Panel principal -->
+    <section class="ai-config-main">
+        {% if message == 'saved' %}
+        <div class="scheduled-alert scheduled-alert-success ai-config-alert" style="margin:18px;">
+            Configuración guardada correctamente.
+        </div>
+        {% elif error %}
+        <div class="ai-config-alert is-error" style="margin:18px;">{{ error }}</div>
+        {% endif %}
+
+        <!-- ── Tab: Cuenta ── -->
+        {% if tab == 'cuenta' %}
+
+        <div class="ai-config-form" style="border-bottom:1px solid var(--border); padding-bottom:18px;">
+            <h3 style="margin:0 0 2px;">Información de la cuenta</h3>
+            <p class="ai-config-muted" style="margin:0;">Datos de presentación de la cuenta colaborativa.</p>
+        </div>
+
+        <div class="ai-config-form">
+            <form method="post" action="/settings/cuenta" class="form-stack">
+                <div class="ai-config-grid">
+                    <label class="form-label ai-config-field">
+                        Email de la cuenta
+                        <small>No editable — identifica la cuenta en el sistema.</small>
+                        <input class="form-input" type="email" value="{{ account.email }}" disabled>
+                    </label>
+                    <label class="form-label ai-config-field">
+                        Nombre visible
+                        <input class="form-input" name="display_name" value="{{ account.display_name or '' }}" required>
+                    </label>
+                    <label class="form-label ai-config-field" style="grid-column:span 2;">
+                        Notas internas
+                        <textarea class="form-input" name="notes" rows="3">{{ account.notes or '' }}</textarea>
+                    </label>
+                </div>
+                <div class="info-grid" style="margin-top:0;">
+                    <div class="info-card">
+                        <div class="info-label">Estado</div>
+                        <div class="info-value">{{ account.status }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Login GLPI vinculado</div>
+                        <div class="info-value">{{ account.glpi_login or "—" }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Última validación GLPI</div>
+                        <div class="info-value">{{ (account.last_glpi_validation_at or "No disponible")[:16] }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Ingesta habilitada</div>
+                        <div class="info-value">{{ "Sí" if account.ingestion_enabled else "No" }}</div>
+                    </div>
+                </div>
+                <div class="ai-config-actions form-actions">
+                    <button class="primary-button" type="submit">Guardar</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- ── Tab: IMAP ── -->
+        {% elif tab == 'imap' %}
+
+        <div class="ai-config-form" style="border-bottom:1px solid var(--border); padding-bottom:18px;">
+            <h3 style="margin:0 0 2px;">Credenciales IMAP</h3>
+            <p class="ai-config-muted" style="margin:0;">Buzón compartido que usa la ingesta. Puerto 993 / SSL obligatorio.</p>
+        </div>
+
+        <div class="ai-config-form">
+            <form method="post" action="/settings/imap" class="form-stack">
+                <div class="ai-config-grid">
+                    <label class="form-label ai-config-field">
+                        Servidor IMAP (host)
+                        <input class="form-input" name="imap_host" value="{{ account.imap_host or '' }}"
+                               placeholder="mail.ejemplo.es" required>
+                    </label>
+                    <label class="form-label ai-config-field">
+                        Usuario IMAP
+                        <input class="form-input" name="imap_username" value="{{ account.imap_username or '' }}"
+                               placeholder="sistemas@ejemplo.es" required>
+                    </label>
+                    <label class="form-label ai-config-field" style="grid-column:span 2;">
+                        Contraseña IMAP
+                        <small>Déjala en blanco para conservar la actual.</small>
+                        <input class="form-input" type="password" name="imap_password" autocomplete="new-password"
+                               placeholder="{{ account.imap_password_masked }}">
+                    </label>
+                </div>
+                <div class="info-grid" style="margin-top:0;">
+                    <div class="info-card">
+                        <div class="info-label">Puerto</div>
+                        <div class="info-value">{{ account.imap_port or 993 }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">SSL</div>
+                        <div class="info-value">{{ "Sí" if account.imap_use_ssl else "No" }}</div>
+                    </div>
+                    <div class="info-card">
+                        <div class="info-label">Última validación</div>
+                        <div class="info-value">{{ (account.imap_last_validated_at or "No disponible")[:16] }}</div>
+                    </div>
+                </div>
+                <div class="ai-config-actions form-actions">
+                    <button class="primary-button" type="submit">Guardar credenciales IMAP</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- ── Tab: GLPI ── -->
+        {% elif tab == 'glpi' %}
+
+        <div class="ai-config-form" style="border-bottom:1px solid var(--border); padding-bottom:18px;">
+            <h3 style="margin:0 0 2px;">Instancia GLPI</h3>
+            <p class="ai-config-muted" style="margin:0;">URL y token de aplicación de la instancia GLPI a la que está vinculada esta cuenta.</p>
+        </div>
+
+        <div class="ai-config-form">
+            {% if account.glpi_instance_id %}
+            <form method="post" action="/settings/glpi" class="form-stack">
+                <input type="hidden" name="glpi_instance_id" value="{{ account.glpi_instance_id }}">
+                <div class="ai-config-grid">
+                    <label class="form-label ai-config-field">
+                        Nombre de la instancia
+                        <input class="form-input" name="glpi_name" value="{{ account.glpi_name or '' }}" required>
+                    </label>
+                    <label class="form-label ai-config-field">
+                        URL base de GLPI
+                        <input class="form-input" name="base_url" value="{{ account.glpi_base_url or '' }}"
+                               placeholder="http://glpi" required>
+                    </label>
+                    <label class="form-label ai-config-field" style="grid-column:span 2;">
+                        App Token
+                        <small>Déjalo en blanco para conservar el actual.</small>
+                        <input class="form-input" type="password" name="app_token" autocomplete="off"
+                               placeholder="{{ account.glpi_token_masked }}">
+                    </label>
+                    <label class="form-label checkbox-label">
+                        <input type="checkbox" name="verify_tls" value="1" {% if account.verify_tls %}checked{% endif %}>
+                        Verificar certificado TLS
+                    </label>
+                </div>
+                <div class="ai-config-actions form-actions">
+                    <button class="primary-button" type="submit">Guardar configuración GLPI</button>
+                </div>
+            </form>
+            {% else %}
+            <p class="pane-empty-text">No hay instancia GLPI vinculada a esta cuenta. Configura la cuenta mediante el script de inicialización.</p>
+            {% endif %}
+        </div>
+
+        {% endif %}
+    </section>
+
+</main>
+{% endblock %}

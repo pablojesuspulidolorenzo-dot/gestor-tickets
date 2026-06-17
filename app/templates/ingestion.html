@@ -11,30 +11,7 @@
     "error_connection": "Error de conexión",
     "error_unknown": "Error desconocido"
 } %}
-<header class="app-header">
-    <div class="logo-section">
-        <div class="logo-icon">GT</div>
-        <h1 class="logo-text">gestor-tickets</h1>
-    </div>
-
-    <nav class="top-nav">
-        <a href="/app" class="nav-btn">Panel</a>
-        <a href="/mailbox" class="nav-btn">Bandeja</a>
-        <a href="/threads" class="nav-btn">Hilos</a>
-        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
-        <a href="/ingestion" class="nav-btn active">Ingesta</a>
-        <a href="/accounts" class="nav-btn">Cuentas</a>
-        <a href="/settings" class="nav-btn">Configuración</a>
-        <a href="/settings/ai" class="nav-btn">Configuración IA</a>
-    </nav>
-
-    <div class="system-status">
-        <span class="version-text">{{ version.full }}</span>
-        <form method="post" action="/logout">
-            <button class="logout-button">Salir</button>
-        </form>
-    </div>
-</header>
+{% include "partials/nav.html" %}
 
 <main class="app-container">
     <section class="thread-list-panel">
@@ -230,18 +207,32 @@
                 <h3 style="margin-top: 0;">Últimas ejecuciones</h3>
                 {% for run in runs %}
                 <a class="timeline-item mailbox-message-link" href="/ingestion/runs/{{ run.id }}">
-                    <div class="timeline-title">
-                        Run #{{ run.id }} · {{ run.status }}
+                    <div class="timeline-title" style="display:flex; align-items:center; gap:10px;">
+                        Run #{{ run.id }}
+                        {% if run.status == "success" %}
+                        <span class="ingestion-run-badge is-ok">Completado</span>
+                        {% elif run.status in ["error", "error_auth", "error_connection", "error_unknown"] %}
+                        <span class="ingestion-run-badge is-err">Error</span>
+                        {% elif run.status == "running" %}
+                        <span class="ingestion-run-badge is-running">En curso</span>
+                        {% else %}
+                        <span class="ingestion-run-badge">{{ run.status }}</span>
+                        {% endif %}
                     </div>
                     <div class="timeline-meta">
-                        {{ run.started_at }} → {{ run.finished_at or "en curso" }}
+                        {{ (run.started_at or "")[:16] }} → {{ (run.finished_at or "en curso")[:16] }}
                     </div>
-                    <p class="pane-empty-text">
-                        Entrada: {{ run.scanned_inbox_count }} · Enviados: {{ run.scanned_sent_count }} ·
-                        Importados: {{ run.imported_count }} · Duplicados: {{ run.duplicate_count }} · Errores: {{ run.error_count }}
+                    <p class="pane-empty-text" style="margin-top:4px;">
+                        <span title="Entrada">📥 {{ run.scanned_inbox_count }}</span>
+                        · <span title="Enviados">📤 {{ run.scanned_sent_count }}</span>
+                        · <span title="Importados" style="color:#166534;">✓ {{ run.imported_count }}</span>
+                        · <span title="Duplicados">⊘ {{ run.duplicate_count }}</span>
+                        {% if run.error_count > 0 %}
+                        · <span title="Errores" style="color:#dc2626;">✗ {{ run.error_count }}</span>
+                        {% endif %}
                     </p>
                     {% if run.error_message %}
-                    <p class="pane-empty-text">{{ run.error_message }}</p>
+                    <p class="pane-empty-text" style="color:var(--danger); margin-top:4px;">{{ run.error_message }}</p>
                     {% endif %}
                 </a>
                 {% endfor %}

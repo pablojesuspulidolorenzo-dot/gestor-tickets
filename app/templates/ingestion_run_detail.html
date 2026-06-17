@@ -3,30 +3,7 @@
 {% block title %}Run de ingesta #{{ run.id }} - Gestor Tickets{% endblock %}
 
 {% block content %}
-<header class="app-header">
-    <div class="logo-section">
-        <div class="logo-icon">GT</div>
-        <h1 class="logo-text">gestor-tickets</h1>
-    </div>
-
-    <nav class="top-nav">
-        <a href="/app" class="nav-btn">Panel</a>
-        <a href="/mailbox" class="nav-btn">Bandeja</a>
-        <a href="/threads" class="nav-btn">Hilos</a>
-        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
-        <a href="/ingestion" class="nav-btn active">Ingesta</a>
-        <a href="/accounts" class="nav-btn">Cuentas</a>
-        <a href="/settings" class="nav-btn">Configuración</a>
-        <a href="/settings/ai" class="nav-btn">Configuración IA</a>
-    </nav>
-
-    <div class="system-status">
-        <span class="version-text">{{ version.full }}</span>
-        <form method="post" action="/logout">
-            <button class="logout-button">Salir</button>
-        </form>
-    </div>
-</header>
+{% include "partials/nav.html" %}
 
 <main class="app-container">
     <section class="thread-list-panel">
@@ -186,8 +163,10 @@
             </section>
 
             <section class="email-body-card">
-                <h3 style="margin-top: 0;">JSON completo</h3>
-                <pre class="code-box">{{ run.details_json_pretty }}</pre>
+                <details>
+                    <summary style="cursor:pointer; font-weight:700; color:var(--text-secondary);">JSON completo del run</summary>
+                    <pre class="code-box" style="margin-top:12px;">{{ run.details_json_pretty }}</pre>
+                </details>
             </section>
         </div>
     </section>

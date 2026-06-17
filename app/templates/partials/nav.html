@@ -1,0 +1,23 @@
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
+
+    <nav class="top-nav">
+        <a href="/app" class="nav-btn {% if active_section == 'panel' %}active{% endif %}">Panel</a>
+        <a href="/mailbox" class="nav-btn {% if active_section == 'mailbox' %}active{% endif %}">Bandeja</a>
+        <a href="/threads" class="nav-btn {% if active_section == 'threads' %}active{% endif %}">Hilos</a>
+        <a href="/tickets" class="nav-btn {% if active_section == 'tickets' %}active{% endif %}">Tickets GLPI</a>
+        <a href="/ingestion" class="nav-btn {% if active_section == 'ingestion' %}active{% endif %}">Ingesta</a>
+        <a href="/accounts" class="nav-btn {% if active_section == 'accounts' %}active{% endif %}">Cuentas</a>
+        <a href="/settings" class="nav-btn {% if active_section in ('settings', 'ai_settings') %}active{% endif %}">Configuración</a>
+    </nav>
+
+    <div class="system-status">
+        <span class="version-text">{{ version.full }}</span>
+        <form method="post" action="/logout">
+            <button class="logout-button">Salir</button>
+        </form>
+    </div>
+</header>
