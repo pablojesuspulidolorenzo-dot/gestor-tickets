@@ -563,6 +563,10 @@ a {
 .ai-config-empty { border: 1px dashed var(--border); border-radius: 14px; padding: 18px; color: var(--text-secondary); display: grid; gap: 6px; }
 .ai-config-main { min-width: 0; overflow: hidden; }
 .ai-config-form { padding: 22px; gap: 18px; }
+.ai-tabs-nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.ai-tab-button { border: 1px solid var(--border); border-radius: 999px; padding: 9px 13px; background: #fff; color: var(--text-secondary); font-weight: 750; cursor: pointer; }
+.ai-tab-button.is-active { border-color: rgba(37,99,235,.35); background: #eff6ff; color: var(--primary-dark); }
+.ai-tab-button:disabled { cursor: not-allowed; opacity: .48; background: #f8fafc; }
 .ai-config-step, .ai-config-history { display: none; padding: 22px; }
 .ai-config-step.is-visible, .ai-config-history { display: block; }
 .ai-config-step-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; }

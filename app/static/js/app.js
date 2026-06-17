@@ -37,7 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
             button.disabled = true;
             button.innerHTML = button.dataset.loadingText || "Procesando...";
         } else {
-            button.disabled = false;
+            button.disabled = button.dataset.keepDisabled === "true";
             if (button.dataset.originalHtml) button.innerHTML = button.dataset.originalHtml;
             delete button.dataset.originalHtml;
         }
@@ -50,11 +50,28 @@ document.addEventListener("DOMContentLoaded", () => {
         box.dataset.status = kind;
     };
 
-    const showPhase = (form, phase) => {
-        form.querySelectorAll("[data-ai-phase]").forEach((section) => {
-            const current = Number(section.dataset.aiPhase || "0");
-            section.classList.toggle("is-visible", current <= phase);
+    const setActiveTab = (form, phase) => {
+        const target = String(phase);
+        form.querySelectorAll("[data-ai-tab-panel]").forEach((section) => {
+            section.classList.toggle("is-visible", section.dataset.aiTabPanel === target);
         });
+        form.querySelectorAll(".ai-tab-button").forEach((button) => {
+            const active = button.dataset.aiTab === target;
+            button.classList.toggle("is-active", active);
+            button.setAttribute("aria-selected", active ? "true" : "false");
+        });
+    };
+
+    const setTabEnabled = (form, phase, enabled) => {
+        const button = form.querySelector(`.ai-tab-button[data-ai-tab="${phase}"]`);
+        if (button) button.disabled = !enabled;
+    };
+
+    const requireConnectionValidation = (form) => {
+        form.dataset.connectionOk = "false";
+        setTabEnabled(form, 2, false);
+        setTabEnabled(form, 3, false);
+        setActiveTab(form, 1);
     };
 
     const selectedModel = (form) => {
@@ -77,7 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
             timeout_seconds: Number(form.querySelector('input[name="timeout_seconds"]')?.value || 60),
             temperature: Number(form.querySelector('input[name="temperature"]')?.value || 0.2),
             top_p: Number(form.querySelector('input[name="top_p"]')?.value || 1),
-            max_tokens: Number(form.querySelector('input[name="max_tokens"]')?.value || 1024),
+            max_tokens: Number(form.querySelector('input[name="max_tokens"]')?.value || 32000),
             enable_thinking: Boolean(form.querySelector('input[name="enable_thinking"]')?.checked),
             reasoning_effort: form.querySelector('select[name="reasoning_effort"]')?.value || "none",
             daily_limit: Number(form.querySelector('input[name="daily_limit"]')?.value || 0) || null,
@@ -131,13 +148,14 @@ document.addEventListener("DOMContentLoaded", () => {
         meta.textContent = parts.length ? parts.join(" · ") : "Sin metadatos adicionales.";
     };
 
-    const refreshPhaseState = (form) => {
+    const refreshPhaseState = (form, options = {}) => {
         const hasModels = form.querySelectorAll(".ai-model-select option[value]:not([value=''])").length > 0;
         const hasModel = Boolean(selectedModel(form));
-        const connectionOk = form.dataset.connectionOk === "true" || form.dataset.hasModels === "true";
-        if (hasModel) showPhase(form, 4);
-        else if (connectionOk || hasModels) showPhase(form, 2);
-        else showPhase(form, 1);
+        const connectionOk = form.dataset.connectionOk === "true";
+        setTabEnabled(form, 2, connectionOk);
+        setTabEnabled(form, 3, connectionOk && hasModel);
+        if (options.activateModelTab && connectionOk) setActiveTab(form, 2);
+        if (options.activateConfigTab && connectionOk && hasModel) setActiveTab(form, 3);
         const empty = form.querySelector(".ai-config-model-empty");
         if (empty) empty.classList.toggle("is-hidden", hasModels);
         updateModelMeta(form);
@@ -189,8 +207,28 @@ document.addEventListener("DOMContentLoaded", () => {
                 option.hidden = Boolean(option.value) && !option.textContent.toLowerCase().includes(query) && !option.value.toLowerCase().includes(query);
             });
         });
-        form.querySelector(".ai-model-select")?.addEventListener("change", () => refreshPhaseState(form));
-        form.querySelector(".ai-manual-model")?.addEventListener("input", () => refreshPhaseState(form));
+        form.querySelectorAll(".ai-tab-button").forEach((button) => {
+            button.addEventListener("click", () => {
+                if (!button.disabled) setActiveTab(form, button.dataset.aiTab || "1");
+            });
+        });
+
+        const validateKeyButton = form.querySelector(".ai-validate-key-button");
+        const apiKeyInput = form.querySelector(".ai-api-key");
+        const syncValidateKeyButton = () => {
+            if (!validateKeyButton) return;
+            delete validateKeyButton.dataset.keepDisabled;
+            validateKeyButton.disabled = !(apiKeyInput?.value.trim());
+        };
+        syncValidateKeyButton();
+        apiKeyInput?.addEventListener("input", () => {
+            syncValidateKeyButton();
+            requireConnectionValidation(form);
+        });
+
+        const syncModelSelection = () => refreshPhaseState(form, {activateConfigTab: Boolean(selectedModel(form))});
+        form.querySelector(".ai-model-select")?.addEventListener("change", syncModelSelection);
+        form.querySelector(".ai-manual-model")?.addEventListener("input", syncModelSelection);
 
         const discover = async (button, validateConnectionOnly = false) => {
             const endpointId = form.dataset.endpointId;
@@ -203,8 +241,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 else data = await apiPost("/api/ai-settings/discover-models-preview", endpointPayload(form));
                 populateModels(form, data.models || []);
                 form.dataset.connectionOk = "true";
+                if (validateConnectionOnly && button) {
+                    button.dataset.keepDisabled = "true";
+                    button.disabled = true;
+                }
                 setResult(form, `OK. Modelos obtenidos: ${(data.models || []).length}.`, "ok");
-                refreshPhaseState(form);
+                refreshPhaseState(form, {activateModelTab: true});
             } catch (error) {
                 form.dataset.connectionOk = "false";
                 setResult(form, `Error: ${error.message}`, "error");
@@ -230,6 +272,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (endpointId && !apiKey) data = await apiPost(`/api/ai-settings/endpoints/${endpointId}/validate-model`, {model_id: model});
                 else data = await apiPost("/api/ai-settings/validate-model-preview", payload);
                 renderValidation(form, data, payload);
+                if (data.status === "ok") {
+                    const activeCheckbox = form.querySelector('input[name="is_active"]');
+                    if (activeCheckbox) {
+                        activeCheckbox.disabled = false;
+                        activeCheckbox.checked = true;
+                    }
+                }
                 setResult(form, data.status === "ok" ? "Validación correcta." : `Validación con aviso: ${data.error_type || "revisar respuesta"}.`, data.status === "ok" ? "ok" : "error");
             } catch (error) {
                 setResult(form, `Error validando modelo: ${error.message}`, "error");
