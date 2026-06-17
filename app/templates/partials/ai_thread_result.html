@@ -1,0 +1,48 @@
+{% if ok %}
+<div class="ai-result-card">
+    <div class="ai-result-header">
+        <span class="ai-result-title">Síntesis IA del hilo</span>
+        {% if result.state_summary_json and result.state_summary_json.estado_actual %}
+        <span class="ai-badge ai-estado-{{ result.state_summary_json.estado_actual | replace('_', '-') }}">
+            {{ result.state_summary_json.estado_actual | replace('_', ' ') }}
+        </span>
+        {% endif %}
+    </div>
+
+    {% if result.short_dialogue_text %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Resumen</span>
+        <span class="ai-result-value">{{ result.short_dialogue_text }}</span>
+    </div>
+    {% endif %}
+
+    {% if result.state_summary_json %}
+    {% set ss = result.state_summary_json %}
+
+    {% if ss.sintomas_actuales %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Síntomas actuales</span>
+        <span class="ai-result-value">{{ ss.sintomas_actuales | join('; ') }}</span>
+    </div>
+    {% endif %}
+
+    {% if ss.acciones_ya_realizadas %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Acciones realizadas</span>
+        <span class="ai-result-value">{{ ss.acciones_ya_realizadas | join('; ') }}</span>
+    </div>
+    {% endif %}
+
+    {% if ss.bloqueo_actual %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Bloqueo actual</span>
+        <span class="ai-result-value">{{ ss.bloqueo_actual }}</span>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+{% else %}
+<div class="scheduled-alert scheduled-alert-error" style="margin: 8px 0;">
+    Error IA: {{ error }}
+</div>
+{% endif %}

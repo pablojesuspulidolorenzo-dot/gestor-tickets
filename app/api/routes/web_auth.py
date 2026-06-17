@@ -59,6 +59,8 @@ from app.services.thread_service import (
     get_thread_detail,
     list_system_threads,
 )
+from app.services.email_ai_processing_service import get_email_ai_result, process_email
+from app.services.thread_ai_synthesis_service import get_thread_ai_synthesis, synthesize_thread
 
 router = APIRouter()
 templates = Jinja2Templates(directory="/app/templates")
@@ -332,16 +334,19 @@ def mailbox_message_page(
             uid=uid,
         )
         thread = None
+        ai_email_result = None
         if archived:
             thread = get_active_thread_for_email(
                 db,
                 email_message_id=int(archived["email_message_id"]),
             )
+            ai_email_result = get_email_ai_result(db, int(archived["email_message_id"]))
         error = None
     except ValueError as exc:
         detail = None
         archived = None
         thread = None
+        ai_email_result = None
         error = str(exc)
 
     if error:
@@ -377,6 +382,7 @@ def mailbox_message_page(
             message=detail,
             archived=archived,
             thread=thread,
+            ai_email_result=ai_email_result,
             safety_notes=MESSAGE_DETAIL_SAFETY_NOTES,
         ),
     )
@@ -502,6 +508,7 @@ def thread_detail_page(
             account_id=int(user["account_id"]),
             thread_id=thread_id,
         )
+        ai_thread_result = get_thread_ai_synthesis(db, thread_id)
     except ValueError:
         return RedirectResponse(url="/threads", status_code=303)
 
@@ -515,6 +522,7 @@ def thread_detail_page(
             thread=thread,
             messages=messages,
             glpi_tickets=glpi_tickets,
+            ai_thread_result=ai_thread_result,
         ),
     )
 
@@ -550,6 +558,55 @@ def thread_create_glpi_ticket_web(
 
     return RedirectResponse(url=f"/threads/{thread_id}", status_code=303)
 
+
+@router.post("/mailbox/message/process-ai", response_class=HTMLResponse)
+def mailbox_message_process_ai(
+    request: Request,
+    email_message_id: int,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+
+    outcome = process_email(
+        db,
+        email_message_id=email_message_id,
+        account_id=int(user["account_id"]),
+        user_id=int(user["user_id"]),
+    )
+    context = _template_context(request, **outcome)
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/ai_email_result.html",
+        context=context,
+    )
+
+
+@router.post("/threads/{thread_id}/synthesize-ai", response_class=HTMLResponse)
+def thread_synthesize_ai(
+    request: Request,
+    thread_id: int,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+
+    outcome = synthesize_thread(
+        db,
+        thread_id=thread_id,
+        account_id=int(user["account_id"]),
+        user_id=int(user["user_id"]),
+    )
+    context = _template_context(request, **outcome)
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/ai_thread_result.html",
+        context=context,
+    )
 
 
 @router.get("/tickets", response_class=HTMLResponse)

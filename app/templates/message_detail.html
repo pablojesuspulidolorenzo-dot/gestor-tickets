@@ -102,6 +102,28 @@
                     </button>
                 </form>
                 {% endif %}
+
+                <div id="ai-email-result" style="margin: 18px 0;">
+                    {% if ai_email_result and ai_email_result.status == 'processed' %}
+                    {% with ok=True, result=ai_email_result %}
+                    {% include "partials/ai_email_result.html" %}
+                    {% endwith %}
+                    {% elif ai_email_result and ai_email_result.status == 'error' %}
+                    <div class="scheduled-alert scheduled-alert-error">
+                        Error IA previo: {{ ai_email_result.error_message }}
+                    </div>
+                    {% endif %}
+                </div>
+                <button class="secondary-button"
+                        hx-post="/mailbox/message/process-ai?email_message_id={{ archived.email_message_id }}"
+                        hx-target="#ai-email-result"
+                        hx-swap="innerHTML"
+                        hx-indicator="#ai-email-spinner"
+                        style="margin-bottom: 8px;">
+                    Analizar con IA
+                </button>
+                <span id="ai-email-spinner" class="htmx-indicator ai-spinner"> Procesando...</span>
+
             {% else %}
             <form method="post" action="/mailbox/message/archive?mailbox={{ message.mailbox|urlencode }}&uid={{ message.uid|urlencode }}" style="margin: 18px 0;">
                 <button class="primary-button" type="submit">

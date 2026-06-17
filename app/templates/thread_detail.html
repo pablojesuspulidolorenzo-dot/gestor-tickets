@@ -120,6 +120,27 @@
             </section>
             {% endif %}
 
+            <div id="ai-thread-result" style="margin: 18px 0;">
+                {% if ai_thread_result and ai_thread_result.status == 'processed' %}
+                {% with ok=True, result=ai_thread_result %}
+                {% include "partials/ai_thread_result.html" %}
+                {% endwith %}
+                {% elif ai_thread_result and ai_thread_result.status == 'error' %}
+                <div class="scheduled-alert scheduled-alert-error">
+                    Error IA previo: {{ ai_thread_result.error_message }}
+                </div>
+                {% endif %}
+            </div>
+            <button class="secondary-button"
+                    hx-post="/threads/{{ thread.id }}/synthesize-ai"
+                    hx-target="#ai-thread-result"
+                    hx-swap="innerHTML"
+                    hx-indicator="#ai-thread-spinner"
+                    style="margin-bottom: 18px;">
+                Sintetizar hilo con IA
+            </button>
+            <span id="ai-thread-spinner" class="htmx-indicator ai-spinner"> Procesando...</span>
+
             <div class="info-grid">
                 <div class="info-card">
                     <div class="info-label">Hilo</div>

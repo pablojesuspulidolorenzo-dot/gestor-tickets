@@ -600,4 +600,31 @@ a {
 .ai-config-log-list { display: grid; gap: 8px; }
 .ai-config-log-row { display: grid; grid-template-columns: 70px 1fr 1fr 90px 130px 100px; gap: 10px; align-items: center; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; color: var(--text-secondary); overflow: hidden; }
 @media (max-width: 1100px) { .ai-config-shell { grid-template-columns: 1fr; } .ai-config-sidebar { min-height: 0; } }
+
+/* ── AI Result Cards ─────────────────────────────────────────── */
+.ai-result-card { border: 1px solid #bfdbfe; border-radius: 14px; background: #eff6ff; padding: 14px 16px; }
+.ai-result-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ai-result-title { font-weight: 750; color: var(--primary-dark); }
+.ai-result-row { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid #dbeafe; font-size: .9rem; line-height: 1.5; }
+.ai-result-label { flex: 0 0 130px; color: var(--text-muted); font-weight: 650; }
+.ai-result-value { flex: 1; color: var(--text-primary); }
+.ai-result-footer { display: flex; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
+.ai-hint { font-size: .82rem; color: var(--text-muted); }
+.ai-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: .78rem; font-weight: 750; border: 1px solid transparent; }
+.ai-prioridad-baja    { background: #dcfce7; color: #166534; border-color: #86efac; }
+.ai-prioridad-media   { background: #fef9c3; color: #854d0e; border-color: #fde047; }
+.ai-prioridad-alta    { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+.ai-prioridad-critica { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.ai-tipo-incidencia     { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+.ai-tipo-peticion       { background: #eff6ff; color: #1d4ed8; border-color: #93c5fd; }
+.ai-tipo-consulta       { background: #f0fdf4; color: #166534; border-color: #86efac; }
+.ai-tipo-respuesta-cliente { background: #f5f3ff; color: #5b21b6; border-color: #c4b5fd; }
+.ai-tipo-agradecimiento { background: #f0fdf4; color: #166534; border-color: #86efac; }
+.ai-tipo-spam,.ai-tipo-ruido { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }
+.ai-estado-pendiente-usuario  { background: #ffedd5; color: #9a3412; border-color: #fdba74; }
+.ai-estado-pendiente-tecnico  { background: #fef9c3; color: #854d0e; border-color: #fde047; }
+.ai-estado-resuelto           { background: #dcfce7; color: #166534; border-color: #86efac; }
+.ai-badge-warning { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }
+.ai-spinner { display: none; color: var(--text-muted); font-size: .85rem; }
+.htmx-request .ai-spinner { display: inline; }
 @media (max-width: 760px) { .ai-config-shell { padding: 16px; } .ai-config-grid, .ai-config-log-row { grid-template-columns: 1fr; } .ai-config-hero, .ai-config-sidebar-header, .ai-config-actions, .ai-config-model-tools { align-items: stretch; flex-direction: column; } }

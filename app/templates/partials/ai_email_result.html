@@ -1,0 +1,46 @@
+{% if ok %}
+<div class="ai-result-card">
+    <div class="ai-result-header">
+        <span class="ai-result-title">Análisis IA</span>
+        <span class="ai-badge ai-tipo-{{ result.tipo_correo | replace('_', '-') }}">{{ result.tipo_correo | replace('_', ' ') }}</span>
+        <span class="ai-badge ai-prioridad-{{ result.prioridad_sugerida }}">{{ result.prioridad_sugerida }}</span>
+        {% if result.requiere_revision_humana %}
+        <span class="ai-badge ai-badge-warning">Revisión humana</span>
+        {% endif %}
+    </div>
+
+    {% if result.summary_json and result.summary_json.problema_principal %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Problema</span>
+        <span class="ai-result-value">{{ result.summary_json.problema_principal }}</span>
+    </div>
+    {% endif %}
+
+    {% if result.accion_sugerida %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Acción sugerida</span>
+        <span class="ai-result-value">{{ result.accion_sugerida }}</span>
+    </div>
+    {% endif %}
+
+    {% if result.summary_json and result.summary_json.detalles_tecnicos_aportados %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Detalles técnicos</span>
+        <span class="ai-result-value">{{ result.summary_json.detalles_tecnicos_aportados | join(', ') }}</span>
+    </div>
+    {% endif %}
+
+    <div class="ai-result-footer">
+        {% if result.needs_thread_context %}
+        <span class="ai-hint">Contexto de hilo recomendado</span>
+        {% endif %}
+        {% if result.extraction_confidence is not none %}
+        <span class="ai-hint">Confianza: {{ (result.extraction_confidence * 100) | int }}%</span>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="scheduled-alert scheduled-alert-error" style="margin: 8px 0;">
+    Error IA: {{ error }}
+</div>
+{% endif %}
