@@ -7,7 +7,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 ## Estado Actual
 
 - Ruta del proyecto en servidor: `/var/www/vhosts/gestor-tickets.es/docker/`
-- Version actual de la app: `0.1.44`
+- Version actual de la app: `0.1.45`
 - Stack: FastAPI, Jinja2, HTMX, PostgreSQL 17, GLPI, MariaDB, IMAP, Docker Compose
 - Esquema PostgreSQL principal: `gestor_tickets`
 - Archivo SQL de referencia: `gestor_tickets_v2_schema_postgresql17_sin_triggers.sql`
@@ -288,12 +288,17 @@ Proveedores/preajustes:
 
 UI:
 
-- Pestanas: Proveedor y conexion, Seleccion de modelo, Configuracion del modelo.
-- Fase 2 se habilita tras validar API key.
-- Fase 3 se habilita tras seleccionar modelo.
+- Pestanas: Proveedor y conexion, Seleccion de modelo, Configuracion y validacion del modelo.
+- Boton "Nuevo" navega a `/settings/ai?new=1` para forzar formulario vacio.
+- Endpoint existente (con API key): pestanas 2 y 3 accesibles desde carga inicial.
+- Pestana 2 se habilita tras validar API key (o al cargar endpoint existente).
+- Pestana 3 se habilita tras seleccionar modelo.
+- Boton "Guardar" deshabilitado hasta validar el modelo con exito (o al cargar endpoint ya configurado con modelo).
+- "Validar modelo" y "Guardar endpoint" estan en la pestana 3.
 - `is_active` se habilita y marca tras validacion correcta de modelo.
 - `max_tokens` visible por defecto: `32000`.
 - Selector `reasoning_effort` para Gemini: `none`, `low`, `medium`, `high`.
+- Cambiar API key o modelo revierte el estado y requiere revalidar antes de guardar.
 
 Acciones web:
 

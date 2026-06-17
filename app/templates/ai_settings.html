@@ -35,7 +35,7 @@
                 <p class="ai-config-kicker">Endpoints</p>
                 <h2>Configuración IA</h2>
             </div>
-            <a class="ai-config-new-link" href="/settings/ai">Nuevo</a>
+            <a class="ai-config-new-link" href="/settings/ai?new=1">Nuevo</a>
         </div>
 
         <div class="ai-config-endpoints">
@@ -93,6 +93,8 @@
                 <button type="button" class="ai-tab-button" data-ai-tab="3" disabled aria-selected="false">Configuración del modelo</button>
             </nav>
 
+            <span class="ai-operation-result" role="status"></span>
+
             <section class="ai-config-step is-visible" data-ai-phase="1" data-ai-tab-panel="1">
                 <div class="ai-config-step-head">
                     <span class="ai-config-step-number">1</span>
@@ -141,8 +143,7 @@
                 </label>
 
                 <div class="ai-config-actions">
-                    <button class="primary-button ai-validate-key-button" type="button" data-loading-text="Validando...">Validar API key</button>
-                    <span class="ai-operation-result" role="status"></span>
+                    <button class="primary-button ai-validate-key-button" type="button" disabled data-loading-text="Validando...">Validar API key</button>
                 </div>
             </section>
 
@@ -187,8 +188,8 @@
                 <div class="ai-config-step-head">
                     <span class="ai-config-step-number">3</span>
                     <div>
-                        <h3>Configuración del modelo</h3>
-                        <p>Ajusta parámetros de prueba y límites internos antes de validar.</p>
+                        <h3>Configuración y validación del modelo</h3>
+                        <p>Ajusta parámetros, valida el modelo con una prueba técnica y guarda el endpoint.</p>
                     </div>
                 </div>
 
@@ -196,7 +197,7 @@
                     <label class="ai-config-field"><span>Timeout segundos</span><input class="form-input" type="number" name="timeout_seconds" min="1" max="600" value="{{ form_endpoint.timeout_seconds if form_endpoint else 60 }}"></label>
                     <label class="ai-config-field"><span>Temperature</span><input class="form-input" type="number" name="temperature" min="0" max="2" step="0.1" value="{{ form_endpoint.temperature if form_endpoint else 0.2 }}"></label>
                     <label class="ai-config-field"><span>Top P</span><input class="form-input" type="number" name="top_p" min="0" max="1" step="0.05" value="{{ form_endpoint.top_p if form_endpoint else 1.0 }}"></label>
-                    <label class="ai-config-field"><span>Max tokens</span><input class="form-input" type="number" name="max_tokens" min="1" value="32000"></label>
+                    <label class="ai-config-field"><span>Max tokens</span><input class="form-input" type="number" name="max_tokens" min="1" value="{{ form_endpoint.max_tokens if form_endpoint else 32000 }}"></label>
                 </div>
 
                 <div class="ai-config-grid">
@@ -223,20 +224,10 @@
                     <label class="ai-config-field"><span>Cabeceras adicionales JSON</span><textarea class="form-input" name="extra_headers_json" rows="3">{{ (form_endpoint.extra_headers_json if form_endpoint else {}) | tojson }}</textarea><small>No incluir Authorization, tokens ni secretos. OpenRouter puede usar X-Title.</small></label>
                     <label class="ai-config-field"><span>Política de reintentos JSON</span><textarea class="form-input" name="retry_policy_json" rows="4">{{ (form_endpoint.retry_policy_json if form_endpoint else {"max_retries":1,"retry_on":["timeout","connection_error","rate_limited"],"do_not_retry_on":["auth_error","quota_exceeded","model_not_found","invalid_request"]}) | tojson }}</textarea></label>
                 </details>
-            </section>
-
-            <section class="ai-config-step" data-ai-phase="4">
-                <div class="ai-config-step-head">
-                    <span class="ai-config-step-number">4</span>
-                    <div>
-                        <h3>Validación parametrizada</h3>
-                        <p>Envía una prueba técnica mínima. No se envía contenido real de correos, hilos ni tickets.</p>
-                    </div>
-                </div>
 
                 <div class="ai-config-actions">
                     <button class="primary-button ai-preview-validate-button" type="button" data-loading-text="Validando...">Validar modelo</button>
-                    <button class="primary-button" type="submit">Guardar endpoint</button>
+                    <button class="primary-button" type="submit" data-ai-save-button disabled>Guardar endpoint</button>
                     {% if selected_endpoint %}
                     <button class="logout-button" type="submit" form="ai-set-default-form">Predeterminar</button>
                     <button class="logout-button" type="submit" form="ai-toggle-form">{% if selected_endpoint.is_active %}Desactivar{% else %}Activar{% endif %}</button>

@@ -1039,7 +1039,8 @@ def ai_settings_page(request: Request, db: Session = Depends(get_db)):
         except ValueError:
             selected_endpoint = None
 
-    if selected_endpoint is None and endpoints:
+    force_new = request.query_params.get("new") == "1"
+    if selected_endpoint is None and endpoints and not force_new:
         selected_endpoint = endpoints[0]
         models = list_models(db, int(selected_endpoint["id"]))
         validation_logs = list_validation_logs(db, int(selected_endpoint["id"]))

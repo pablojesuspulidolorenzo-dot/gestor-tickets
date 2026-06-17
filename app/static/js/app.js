@@ -67,11 +67,19 @@ document.addEventListener("DOMContentLoaded", () => {
         if (button) button.disabled = !enabled;
     };
 
+    const syncSaveButton = (form) => {
+        const btn = form.querySelector("[data-ai-save-button]");
+        if (!btn) return;
+        btn.disabled = form.dataset.modelValidated !== "true";
+    };
+
     const requireConnectionValidation = (form) => {
         form.dataset.connectionOk = "false";
+        form.dataset.modelValidated = "false";
         setTabEnabled(form, 2, false);
         setTabEnabled(form, 3, false);
         setActiveTab(form, 1);
+        syncSaveButton(form);
     };
 
     const selectedModel = (form) => {
@@ -159,6 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const empty = form.querySelector(".ai-config-model-empty");
         if (empty) empty.classList.toggle("is-hidden", hasModels);
         updateModelMeta(form);
+        syncSaveButton(form);
     };
 
     const populateModels = (form, models) => {
@@ -182,6 +191,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!select.value && select.options.length > 1) select.options[1].selected = true;
         if (filter) filter.value = "";
         form.dataset.hasModels = models.length ? "true" : "false";
+        // Re-fetching models forces model re-validation before saving
+        form.dataset.modelValidated = "false";
         refreshPhaseState(form);
     };
 
@@ -226,7 +237,12 @@ document.addEventListener("DOMContentLoaded", () => {
             requireConnectionValidation(form);
         });
 
-        const syncModelSelection = () => refreshPhaseState(form, {activateConfigTab: Boolean(selectedModel(form))});
+        const syncModelSelection = () => {
+            // Changing model requires re-validation before saving
+            form.dataset.modelValidated = "false";
+            syncSaveButton(form);
+            refreshPhaseState(form, {activateConfigTab: Boolean(selectedModel(form))});
+        };
         form.querySelector(".ai-model-select")?.addEventListener("change", syncModelSelection);
         form.querySelector(".ai-manual-model")?.addEventListener("input", syncModelSelection);
 
@@ -273,12 +289,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 else data = await apiPost("/api/ai-settings/validate-model-preview", payload);
                 renderValidation(form, data, payload);
                 if (data.status === "ok") {
+                    form.dataset.modelValidated = "true";
                     const activeCheckbox = form.querySelector('input[name="is_active"]');
                     if (activeCheckbox) {
                         activeCheckbox.disabled = false;
                         activeCheckbox.checked = true;
                     }
                 }
+                syncSaveButton(form);
                 setResult(form, data.status === "ok" ? "Validación correcta." : `Validación con aviso: ${data.error_type || "revisar respuesta"}.`, data.status === "ok" ? "ok" : "error");
             } catch (error) {
                 setResult(form, `Error validando modelo: ${error.message}`, "error");
@@ -286,6 +304,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 setLoading(button, false);
             }
         });
+
+        // Restore state for already-configured endpoints
+        if (form.dataset.hasApiKey === "true") {
+            form.dataset.connectionOk = "true";
+        }
+        if (form.dataset.hasApiKey === "true" && form.dataset.hasDefaultModel === "true") {
+            form.dataset.modelValidated = "true";
+        }
+
         refreshPhaseState(form);
     });
 });
