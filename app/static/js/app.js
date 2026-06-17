@@ -288,7 +288,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (endpointId && !apiKey) data = await apiPost(`/api/ai-settings/endpoints/${endpointId}/validate-model`, {model_id: model});
                 else data = await apiPost("/api/ai-settings/validate-model-preview", payload);
                 renderValidation(form, data, payload);
-                if (data.status === "ok") {
+                if (data.ok === true) {
                     form.dataset.modelValidated = "true";
                     const activeCheckbox = form.querySelector('input[name="is_active"]');
                     if (activeCheckbox) {
@@ -297,7 +297,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 }
                 syncSaveButton(form);
-                setResult(form, data.status === "ok" ? "Validación correcta." : `Validación con aviso: ${data.error_type || "revisar respuesta"}.`, data.status === "ok" ? "ok" : "error");
+                const resultMsg = data.status === "ok"
+                    ? "Validación correcta."
+                    : data.ok === true
+                        ? `Advertencia: ${data.error_message || data.error_type || "JSON no estricto, pero válido."}`
+                        : `Validación fallida: ${data.error_type || "revisar respuesta"}.`;
+                setResult(form, resultMsg, data.ok === true ? "ok" : "error");
             } catch (error) {
                 setResult(form, `Error validando modelo: ${error.message}`, "error");
             } finally {

@@ -15,6 +15,7 @@ from app.services.ai_settings_service import get_endpoint_secret, list_models, _
 
 REASONING_EFFORT_VALUES = {"none", "low", "medium", "high"}
 THINKING_BLOCK_RE = re.compile(r"<thought>.*?</thought>", re.IGNORECASE | re.DOTALL)
+_MARKDOWN_JSON_RE = re.compile(r"```(?:json)?\s*\n?(.*?)\n?\s*```", re.DOTALL | re.IGNORECASE)
 
 
 def _join_url(base_url: str, path: str) -> str:
@@ -408,11 +409,28 @@ def validate_model(db: Session, endpoint_id: int, model_id: str | None = None) -
         else:
             raw_content = _extract_chat_content(response_json)
             content, thinking_detected = _strip_thinking_blocks(raw_content)
-            strict_json_ok = _strict_json_ok(content)
-            ok = strict_json_ok
-            status = "ok" if ok else "partial"
-            error_type = None if ok else "json_not_strict"
-            error_message = None if ok else "Modelo accesible, pero la respuesta util no es JSON estricto."
+            parsed, is_strict, is_valid_json = _parse_llm_json(content)
+            is_correct = isinstance(parsed, dict) and parsed.get("ok") is True
+
+            if is_correct and is_strict:
+                ok, status, error_type, error_message = True, "ok", None, None
+                preview = content
+            elif is_correct:
+                ok, status = True, "partial"
+                error_type = "json_not_strict"
+                error_message = "Modelo accesible. La respuesta estaba envuelta en markdown; JSON extraído y verificado correctamente."
+                preview = json.dumps(parsed, ensure_ascii=False)
+            elif is_valid_json:
+                ok, status = False, "partial"
+                error_type = "json_unexpected"
+                error_message = "La respuesta contiene JSON válido pero con contenido inesperado."
+                preview = json.dumps(parsed, ensure_ascii=False) if parsed is not None else content
+            else:
+                ok, status = False, "partial"
+                error_type = "json_not_strict"
+                error_message = "Modelo accesible, pero la respuesta no contiene JSON válido."
+                preview = content
+
             result = {
                 "ok": ok,
                 "status": status,
@@ -420,9 +438,9 @@ def validate_model(db: Session, endpoint_id: int, model_id: str | None = None) -
                 "error_message": error_message,
                 "http_status": response.status_code,
                 "latency_ms": latency_ms,
-                "strict_json_ok": strict_json_ok,
+                "strict_json_ok": is_strict,
                 "thinking_detected": thinking_detected,
-                "response_text_preview": content[:1200],
+                "response_text_preview": preview[:1200],
             }
 
         _log_validation(
@@ -484,12 +502,41 @@ def _extract_chat_content(response_json: Any) -> str:
         return ""
 
 
-def _strict_json_ok(content: str) -> bool:
+def _parse_llm_json(content: str) -> tuple[Any | None, bool, bool]:
+    """
+    Extrae y parsea JSON de una respuesta LLM, manejando markdown y texto extra.
+    Retorna: (objeto_parseado, es_estricto, es_json_valido)
+    - es_estricto: True si el contenido ya era JSON puro sin envoltura
+    - es_json_valido: True si se encontró JSON válido (con o sin extracción)
+    """
+    stripped = (content or "").strip()
+
+    # 1. Intento estricto: parse directo
     try:
-        parsed = json.loads(content.strip())
-    except Exception:
-        return False
-    return parsed == {"ok": True}
+        return json.loads(stripped), True, True
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Extraer de bloque markdown ```json ... ``` o ``` ... ```
+    match = _MARKDOWN_JSON_RE.search(stripped)
+    if match:
+        candidate = match.group(1).strip()
+        try:
+            return json.loads(candidate), False, True
+        except json.JSONDecodeError:
+            pass
+
+    # 3. Buscar primer objeto { } o array [ ] en el texto libre
+    for open_c, close_c in [('{', '}'), ('[', ']')]:
+        start = stripped.find(open_c)
+        end = stripped.rfind(close_c)
+        if start != -1 and end > start:
+            try:
+                return json.loads(stripped[start:end + 1]), False, True
+            except json.JSONDecodeError:
+                pass
+
+    return None, False, False
 
 
 def discover_models_preview(payload: dict[str, Any]) -> list[dict]:
@@ -561,19 +608,38 @@ def validate_model_preview(payload: dict[str, Any], model_id: str | None = None)
 
         raw_content = _extract_chat_content(response_json)
         content, thinking_detected = _strip_thinking_blocks(raw_content)
-        strict_json_ok = _strict_json_ok(content)
-        ok = strict_json_ok
-        error_type = None if ok else "json_not_strict"
+        parsed, is_strict, is_valid_json = _parse_llm_json(content)
+        is_correct = isinstance(parsed, dict) and parsed.get("ok") is True
+
+        if is_correct and is_strict:
+            ok, status, error_type, error_message = True, "ok", None, None
+            preview = content
+        elif is_correct:
+            ok, status = True, "partial"
+            error_type = "json_not_strict"
+            error_message = "Modelo accesible. La respuesta estaba envuelta en markdown; JSON extraído y verificado correctamente."
+            preview = json.dumps(parsed, ensure_ascii=False)
+        elif is_valid_json:
+            ok, status = False, "partial"
+            error_type = "json_unexpected"
+            error_message = "La respuesta contiene JSON válido pero con contenido inesperado."
+            preview = json.dumps(parsed, ensure_ascii=False) if parsed is not None else content
+        else:
+            ok, status = False, "partial"
+            error_type = "json_not_strict"
+            error_message = "Modelo accesible, pero la respuesta no contiene JSON válido."
+            preview = content
+
         return {
             "ok": ok,
-            "status": "ok" if ok else "partial",
+            "status": status,
             "error_type": error_type,
-            "error_message": None if ok else "Modelo accesible, pero la respuesta util no es JSON estricto.",
+            "error_message": error_message,
             "http_status": response.status_code,
             "latency_ms": latency_ms,
-            "strict_json_ok": strict_json_ok,
+            "strict_json_ok": is_strict,
             "thinking_detected": thinking_detected,
-            "response_text_preview": content[:1200],
+            "response_text_preview": preview[:1200],
         }
     except httpx.TimeoutException:
         return {
