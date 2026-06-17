@@ -6,28 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.ai_llm_call_service import AICallError, call_with_fallback
-
-
-SYSTEM_PROMPT_THREAD = (
-    "Eres un coordinador de Service Desk. Tu tarea es analizar un hilo cronológico de correos "
-    "(de más antiguo a más reciente) y generar una síntesis del estado actual de la incidencia.\n"
-    "\n"
-    "REGLAS ESTRICTAS:\n"
-    "1. Responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido.\n"
-    "2. NO uses formato markdown (```json).\n"
-    "3. Escribe en español de España, con un tono profesional y técnico.\n"
-    "\n"
-    "ESQUEMA JSON DE RESPUESTA OBLIGATORIO:\n"
-    '{\n'
-    '  "short_dialogue_text": "Resumen de 2-3 líneas para seguimiento GLPI.",\n'
-    '  "state_summary_json": {\n'
-    '    "estado_actual": "pendiente_usuario|pendiente_tecnico|resuelto",\n'
-    '    "sintomas_actuales": ["falla tras reiniciar"],\n'
-    '    "acciones_ya_realizadas": ["actualizar Windows"],\n'
-    '    "bloqueo_actual": "Esperando log del cliente"\n'
-    '  }\n'
-    '}'
-)
+from app.services.ai_prompt_service import get_active_version
 
 _VALID_ESTADOS = frozenset({"pendiente_usuario", "pendiente_tecnico", "resuelto"})
 
@@ -155,6 +134,14 @@ def synthesize_thread(db: Session, thread_id: int, account_id: int, user_id: int
     Sintetiza el estado de un hilo operativo con IA (Contrato B).
     Retorna {"ok": True, "result": {...}} o {"ok": False, "error": "...", "error_type": "..."}
     """
+    active_version = get_active_version(db, "thread_synthesis")
+    if not active_version:
+        return {
+            "ok": False,
+            "error": "No hay versión activa del prompt 'thread_synthesis'. Configura un prompt activo en Ajustes IA > Prompts.",
+            "error_type": "no_active_prompt",
+        }
+
     thread, messages = _get_thread_with_messages(db, thread_id)
     if not thread:
         return {"ok": False, "error": "Hilo no encontrado.", "error_type": "not_found"}
@@ -181,12 +168,13 @@ def synthesize_thread(db: Session, thread_id: int, account_id: int, user_id: int
         parsed, call_id = call_with_fallback(
             db,
             scope="thread",
-            system_prompt=SYSTEM_PROMPT_THREAD,
+            system_prompt=active_version["system_prompt_template"],
             user_content_json=user_content,
             account_id=account_id,
             user_id=user_id,
             call_purpose="thread_synthesis",
             related_thread_id=thread_id,
+            prompt_version_id=int(active_version["id"]),
         )
     except AICallError as exc:
         _save_synthesis_error(db, record_id, str(exc))

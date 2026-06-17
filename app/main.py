@@ -1,4 +1,6 @@
 from app.services.mail_ingestion_scheduler import start_mail_ingestion_scheduler, stop_mail_ingestion_scheduler
+from app.services.ai_prompt_service import seed_default_templates
+from app.core.db import SessionLocal
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -69,10 +71,12 @@ def htmx_ping():
 
 
 @app.on_event("startup")
-async def _start_mail_ingestion_scheduler() -> None:
+async def _startup() -> None:
     start_mail_ingestion_scheduler()
+    with SessionLocal() as db:
+        seed_default_templates(db)
 
 
 @app.on_event("shutdown")
-async def _stop_mail_ingestion_scheduler() -> None:
+async def _shutdown() -> None:
     await stop_mail_ingestion_scheduler()

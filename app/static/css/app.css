@@ -628,3 +628,50 @@ a {
 .ai-spinner { display: none; color: var(--text-muted); font-size: .85rem; }
 .htmx-request .ai-spinner { display: inline; }
 @media (max-width: 760px) { .ai-config-shell { padding: 16px; } .ai-config-grid, .ai-config-log-row { grid-template-columns: 1fr; } .ai-config-hero, .ai-config-sidebar-header, .ai-config-actions, .ai-config-model-tools { align-items: stretch; flex-direction: column; } }
+
+/* ── AI Section Navigation ───────────────────────────────────── */
+.ai-section-bar { display: flex; gap: 4px; padding: 8px 24px; background: #f8fafc; border-bottom: 1px solid var(--border); }
+.ai-section-link { padding: 6px 16px; border-radius: 8px; font-weight: 650; font-size: .875rem; color: var(--text-secondary); text-decoration: none; transition: background .15s; }
+.ai-section-link:hover { background: #eff6ff; color: var(--primary-dark); }
+.ai-section-link.is-active { background: #eff6ff; color: var(--primary-dark); font-weight: 750; }
+
+/* ── History Page ────────────────────────────────────────────── */
+.page-wide-container { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+.page-wide-header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; }
+.page-wide-header h2 { margin: 0; }
+.ai-history-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; }
+.ai-history-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+.ai-history-table thead th { background: #f8fafc; padding: 10px 12px; text-align: left; font-weight: 700; color: var(--text-muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ai-history-table td { padding: 10px 12px; vertical-align: top; border-bottom: 1px solid var(--border); }
+.ai-history-row:last-child td, .ai-history-detail-row:last-child td { border-bottom: none; }
+.ai-history-row:hover { background: #f8fafc; }
+.ai-history-id { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ai-history-date { white-space: nowrap; color: var(--text-muted); font-size: .8rem; }
+.ai-history-purpose { color: var(--text-secondary); }
+.ai-history-model { color: var(--text-muted); font-size: .8rem; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-history-num { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+.ai-history-expand-btn { padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; font-size: .78rem; font-weight: 650; cursor: pointer; color: var(--primary-dark); }
+.ai-history-expand-btn:hover { background: #eff6ff; }
+.ai-history-detail-row { display: none; background: #f8fafc; }
+.ai-history-detail-row.is-open { display: table-row; }
+.ai-history-detail-content { padding: 4px 0; }
+
+/* ── Call Detail Partial ─────────────────────────────────────── */
+.ai-call-detail { display: grid; gap: 14px; padding: 8px 0; }
+.ai-detail-section { display: grid; gap: 6px; }
+.ai-detail-label { font-size: .78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.ai-detail-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; border-radius: 8px; padding: 8px 12px; font-size: .875rem; }
+.ai-detail-code { font-family: monospace; font-size: .8rem; color: var(--text-secondary); }
+.ai-detail-pre { margin: 0; max-height: 260px; overflow: auto; background: #0f172a; color: #dbeafe; border-radius: 10px; padding: 12px; white-space: pre-wrap; font-size: .78rem; line-height: 1.5; }
+
+/* ── Prompts Page ────────────────────────────────────────────── */
+.ai-versions-table { display: grid; gap: 2px; }
+.ai-versions-header { display: grid; grid-template-columns: 60px 1fr 100px 80px 80px; gap: 12px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; font-size: .78rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.ai-versions-row { display: grid; grid-template-columns: 60px 1fr 100px 80px 80px; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; font-size: .875rem; }
+.ai-versions-row.is-active { border-color: #86efac; background: #f0fdf4; }
+.ai-versions-num { font-weight: 750; color: var(--primary-dark); }
+.ai-versions-notes { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-versions-date { color: var(--text-muted); font-size: .8rem; }
+.ai-versions-prompt-preview { padding: 0 12px 10px; }
+.ai-versions-prompt-preview details summary { font-size: .8rem; color: var(--text-muted); cursor: pointer; padding: 4px 0; }
+.ai-prompt-textarea { font-family: monospace; font-size: .82rem; resize: vertical; min-height: 120px; }

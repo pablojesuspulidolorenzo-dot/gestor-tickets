@@ -1,0 +1,40 @@
+{% if call %}
+<div class="ai-call-detail">
+    {% if call.error_message %}
+    <div class="ai-detail-section">
+        <div class="ai-detail-label">Error</div>
+        <div class="ai-detail-error">{{ call.error_message }}</div>
+    </div>
+    {% endif %}
+
+    {% if call.endpoint_url %}
+    <div class="ai-detail-section">
+        <div class="ai-detail-label">Endpoint URL</div>
+        <code class="ai-detail-code">{{ call.endpoint_url }}</code>
+    </div>
+    {% endif %}
+
+    {% if call.response_parsed_json_pretty %}
+    <div class="ai-detail-section">
+        <div class="ai-detail-label">JSON parseado</div>
+        <pre class="ai-detail-pre">{{ call.response_parsed_json_pretty }}</pre>
+    </div>
+    {% endif %}
+
+    {% if call.request_messages_json_pretty %}
+    <div class="ai-detail-section">
+        <div class="ai-detail-label">Mensajes enviados</div>
+        <pre class="ai-detail-pre">{{ call.request_messages_json_pretty }}</pre>
+    </div>
+    {% endif %}
+
+    {% if call.response_full_json_pretty %}
+    <div class="ai-detail-section">
+        <div class="ai-detail-label">Respuesta completa del LLM</div>
+        <pre class="ai-detail-pre">{{ call.response_full_json_pretty }}</pre>
+    </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="ai-detail-error">Llamada no encontrada.</div>
+{% endif %}

@@ -61,6 +61,13 @@ from app.services.thread_service import (
 )
 from app.services.email_ai_processing_service import get_email_ai_result, process_email
 from app.services.thread_ai_synthesis_service import get_thread_ai_synthesis, synthesize_thread
+from app.services.ai_prompt_service import (
+    activate_version,
+    create_version,
+    get_template_with_versions,
+    list_templates,
+)
+from app.services.ai_call_history_service import get_call_detail, list_call_history
 
 router = APIRouter()
 templates = Jinja2Templates(directory="/app/templates")
@@ -1365,6 +1372,147 @@ def ai_move_down_web(request: Request, endpoint_id: int, db: Session = Depends(g
 
     move_endpoint(db, endpoint_id, "down")
     return RedirectResponse(url=f"/settings/ai?endpoint_id={endpoint_id}", status_code=303)
+
+
+# ── Prompts IA ────────────────────────────────────────────────────────────────
+
+@router.get("/settings/ai/prompts", response_class=HTMLResponse)
+def ai_prompts_page(request: Request, template_id: int | None = None, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    templates_list = list_templates(db)
+    selected_template = None
+    versions = []
+
+    if template_id:
+        selected_template, versions = get_template_with_versions(db, template_id)
+    elif templates_list:
+        selected_template, versions = get_template_with_versions(db, int(templates_list[0]["id"]))
+
+    return templates.TemplateResponse(
+        request=request,
+        name="ai_prompts.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="ai_settings",
+            active_ai_section="prompts",
+            templates_list=templates_list,
+            selected_template=selected_template,
+            versions=versions,
+            message=request.query_params.get("message"),
+            error=request.query_params.get("error"),
+        ),
+    )
+
+
+@router.post("/settings/ai/prompts/{tmpl_id}/versions", response_class=HTMLResponse)
+def ai_create_version_web(
+    request: Request,
+    tmpl_id: int,
+    system_prompt: str = Form(...),
+    user_prompt_template: str = Form(""),
+    notes: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    if not system_prompt.strip():
+        return RedirectResponse(
+            url=f"/settings/ai/prompts?template_id={tmpl_id}&error=El+system+prompt+no+puede+estar+vacío",
+            status_code=303,
+        )
+
+    create_version(
+        db,
+        tmpl_id,
+        system_prompt=system_prompt,
+        user_prompt_template=user_prompt_template,
+        notes=notes,
+        user_id=int(user["user_id"]),
+    )
+    return RedirectResponse(
+        url=f"/settings/ai/prompts?template_id={tmpl_id}&message=version_created",
+        status_code=303,
+    )
+
+
+@router.post("/settings/ai/prompts/{tmpl_id}/versions/{version_id}/activate", response_class=HTMLResponse)
+def ai_activate_version_web(
+    request: Request,
+    tmpl_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    activate_version(db, version_id, tmpl_id)
+    return RedirectResponse(
+        url=f"/settings/ai/prompts?template_id={tmpl_id}&message=version_activated",
+        status_code=303,
+    )
+
+
+# ── Histórico LLM ────────────────────────────────────────────────────────────
+
+@router.get("/settings/ai/history", response_class=HTMLResponse)
+def ai_history_page(request: Request, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    calls = list_call_history(db, limit=60)
+    return templates.TemplateResponse(
+        request=request,
+        name="ai_history.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="ai_settings",
+            active_ai_section="history",
+            calls=calls,
+        ),
+    )
+
+
+@router.get("/settings/ai/history/{call_id}/detail", response_class=HTMLResponse)
+def ai_call_detail_htmx(request: Request, call_id: int, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_manage_ai(user)
+    if denied:
+        return denied
+
+    call = get_call_detail(db, call_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/ai_call_detail.html",
+        context=_template_context(request, call=call),
+    )
 
 
 def _selected_permissions(values: set[str]) -> dict[str, bool]:

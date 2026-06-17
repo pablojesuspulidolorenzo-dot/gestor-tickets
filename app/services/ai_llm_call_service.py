@@ -53,19 +53,20 @@ def _create_call_record(
     messages: list[dict],
     related_email_id: int | None,
     related_thread_id: int | None,
+    prompt_version_id: int | None = None,
 ) -> int:
     row = db.execute(
         text("""
             INSERT INTO gestor_tickets.ai_call_history (
                 account_id, created_by_user_id,
-                scope, call_source, call_purpose,
+                scope, call_source, call_purpose, prompt_version_id,
                 model, endpoint_url, enable_thinking,
                 temperature, top_p, max_tokens, timeout_seconds,
                 status, request_messages_json,
                 related_email_message_id, related_thread_id
             ) VALUES (
                 :account_id, :user_id,
-                CAST(:scope AS gestor_tickets.ai_scope), 'manual_ui', :call_purpose,
+                CAST(:scope AS gestor_tickets.ai_scope), 'manual_ui', :call_purpose, :prompt_version_id,
                 :model, :endpoint_url, :enable_thinking,
                 :temperature, :top_p, :max_tokens, :timeout_seconds,
                 'pending', CAST(:messages AS jsonb),
@@ -78,6 +79,7 @@ def _create_call_record(
             "user_id": user_id,
             "scope": scope,
             "call_purpose": call_purpose,
+            "prompt_version_id": prompt_version_id,
             "model": endpoint.get("default_model"),
             "endpoint_url": endpoint_url,
             "enable_thinking": bool(endpoint.get("enable_thinking")),
@@ -191,6 +193,7 @@ def call_with_fallback(
     call_purpose: str,
     related_email_id: int | None = None,
     related_thread_id: int | None = None,
+    prompt_version_id: int | None = None,
 ) -> tuple[dict, int]:
     """
     Llama al LLM recorriendo endpoints activos por prioridad hasta obtener respuesta válida.
@@ -237,6 +240,7 @@ def call_with_fallback(
             messages=messages,
             related_email_id=related_email_id,
             related_thread_id=related_thread_id,
+            prompt_version_id=prompt_version_id,
         )
 
         payload: dict[str, Any] = {

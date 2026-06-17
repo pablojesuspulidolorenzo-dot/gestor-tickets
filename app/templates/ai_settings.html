@@ -28,6 +28,10 @@
     </div>
 </header>
 
+{% with active_ai_section="endpoints" %}
+{% include "partials/ai_subnav.html" %}
+{% endwith %}
+
 <main class="ai-config-shell">
     <aside class="ai-config-sidebar">
         <div class="ai-config-sidebar-header">

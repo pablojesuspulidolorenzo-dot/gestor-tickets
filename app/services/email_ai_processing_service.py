@@ -6,33 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.ai_llm_call_service import AICallError, call_with_fallback
-
-
-SYSTEM_PROMPT_EMAIL = (
-    "Eres un asistente técnico experto en clasificar y resumir correos electrónicos de soporte IT.\n"
-    "Tu tarea es analizar el correo proporcionado en formato JSON y extraer metadatos estructurados.\n"
-    "\n"
-    "REGLAS ESTRICTAS:\n"
-    "1. Responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido.\n"
-    "2. NO incluyas bloques de código markdown (como ```json).\n"
-    "3. NO añadas explicaciones, saludos ni texto fuera del JSON.\n"
-    "4. El idioma de la respuesta debe ser español.\n"
-    "\n"
-    "ESQUEMA JSON DE RESPUESTA OBLIGATORIO:\n"
-    '{\n'
-    '  "tipo_correo": "incidencia|peticion|consulta|respuesta_cliente|agradecimiento|spam|ruido",\n'
-    '  "prioridad_sugerida": "baja|media|alta|critica",\n'
-    '  "accion_sugerida": "Texto corto (ej. \'Revisar logs\', \'Cerrar ticket\')",\n'
-    '  "requiere_revision_humana": true,\n'
-    '  "body_new_found": true,\n'
-    '  "needs_thread_context": false,\n'
-    '  "extraction_confidence": 0.9,\n'
-    '  "summary_json": {\n'
-    '    "problema_principal": "Descripción breve",\n'
-    '    "detalles_tecnicos_aportados": ["error 504"]\n'
-    '  }\n'
-    '}'
-)
+from app.services.ai_prompt_service import get_active_version
 
 _VALID_TIPOS = frozenset({
     "incidencia", "peticion", "consulta", "respuesta_cliente",
@@ -142,6 +116,14 @@ def process_email(db: Session, email_message_id: int, account_id: int, user_id: 
     Analiza un correo archivado con IA (Contrato A).
     Retorna {"ok": True, "result": {...}} o {"ok": False, "error": "...", "error_type": "..."}
     """
+    active_version = get_active_version(db, "email_analysis")
+    if not active_version:
+        return {
+            "ok": False,
+            "error": "No hay versión activa del prompt 'email_analysis'. Configura un prompt activo en Ajustes IA > Prompts.",
+            "error_type": "no_active_prompt",
+        }
+
     email = _get_email_data(db, email_message_id)
     if not email:
         return {"ok": False, "error": "Correo no encontrado en el sistema.", "error_type": "not_found"}
@@ -160,12 +142,13 @@ def process_email(db: Session, email_message_id: int, account_id: int, user_id: 
         parsed, call_id = call_with_fallback(
             db,
             scope="email",
-            system_prompt=SYSTEM_PROMPT_EMAIL,
+            system_prompt=active_version["system_prompt_template"],
             user_content_json=user_content,
             account_id=account_id,
             user_id=user_id,
             call_purpose="email_analysis",
             related_email_id=email_message_id,
+            prompt_version_id=int(active_version["id"]),
         )
     except AICallError as exc:
         _save_processing_error(db, record_id, str(exc))

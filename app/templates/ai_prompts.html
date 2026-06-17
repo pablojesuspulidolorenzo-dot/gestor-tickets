@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Prompts IA - Gestor Tickets{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <div class="logo-section">
+        <div class="logo-icon">GT</div>
+        <h1 class="logo-text">gestor-tickets</h1>
+    </div>
+
+    <nav class="top-nav">
+        <a href="/app" class="nav-btn">Panel</a>
+        <a href="/mailbox" class="nav-btn">Bandeja</a>
+        <a href="/threads" class="nav-btn">Hilos</a>
+        <a href="/tickets" class="nav-btn">Tickets GLPI</a>
+        <a href="/ingestion" class="nav-btn">Ingesta</a>
+        <a href="/accounts" class="nav-btn">Cuentas</a>
+        <a href="/settings" class="nav-btn">Configuración</a>
+        <a href="/settings/ai" class="nav-btn active">Configuración IA</a>
+    </nav>
+
+    <div class="system-status">
+        <span class="version-text">{{ version.full }}</span>
+        <form method="post" action="/logout">
+            <button class="logout-button">Salir</button>
+        </form>
+    </div>
+</header>
+
+{% include "partials/ai_subnav.html" %}
+
+<main class="ai-config-shell">
+
+    <!-- Sidebar: lista de plantillas -->
+    <aside class="ai-config-sidebar">
+        <div class="ai-config-sidebar-header">
+            <div>
+                <p class="ai-config-kicker">Plantillas</p>
+                <h2>Prompts IA</h2>
+            </div>
+        </div>
+
+        <div class="ai-config-endpoints">
+            {% for tmpl in templates_list %}
+            <a class="ai-config-endpoint {% if selected_template and tmpl.id == selected_template.id %}is-selected{% endif %}"
+               href="/settings/ai/prompts?template_id={{ tmpl.id }}">
+                <div class="ai-config-endpoint-top">
+                    <span class="ai-config-endpoint-name">{{ tmpl.name }}</span>
+                    {% if tmpl.active_version_number %}
+                    <span class="ai-config-status is-ok">v{{ tmpl.active_version_number }} activa</span>
+                    {% else %}
+                    <span class="ai-config-status is-muted">Sin versión activa</span>
+                    {% endif %}
+                </div>
+                <div class="ai-config-endpoint-model">{{ tmpl.key }}</div>
+                <div class="ai-config-endpoint-url">{{ tmpl.version_count }} versión(es) · {{ tmpl.category }}</div>
+            </a>
+            {% endfor %}
+        </div>
+    </aside>
+
+    <!-- Panel principal: detalle de la plantilla seleccionada -->
+    <section class="ai-config-main">
+        {% if message == 'version_created' %}
+        <div class="scheduled-alert scheduled-alert-success ai-config-alert" style="margin: 18px;">
+            Nueva versión creada correctamente.
+        </div>
+        {% elif message == 'version_activated' %}
+        <div class="scheduled-alert scheduled-alert-success ai-config-alert" style="margin: 18px;">
+            Versión activada correctamente.
+        </div>
+        {% elif error %}
+        <div class="ai-config-alert is-error" style="margin: 18px;">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        {% if selected_template %}
+
+        <div class="ai-config-form" style="border-bottom: 1px solid var(--border); padding-bottom: 18px;">
+            <h3 style="margin: 0 0 4px;">{{ selected_template.name }}</h3>
+            <p class="ai-config-muted" style="margin: 0;">{{ selected_template.description or "" }}</p>
+        </div>
+
+        <!-- Tabla de versiones -->
+        {% if versions %}
+        <div class="ai-config-form">
+            <h4 style="margin: 0 0 14px; color: var(--text-secondary);">Versiones</h4>
+            <div class="ai-versions-table">
+                <div class="ai-versions-header">
+                    <span>Versión</span>
+                    <span>Notas</span>
+                    <span>Creada</span>
+                    <span>Estado</span>
+                    <span></span>
+                </div>
+                {% for v in versions %}
+                <div class="ai-versions-row {% if v.is_active %}is-active{% endif %}">
+                    <span class="ai-versions-num">v{{ v.version_number }}</span>
+                    <span class="ai-versions-notes">{{ v.notes or "—" }}</span>
+                    <span class="ai-versions-date">{{ (v.created_at or "")[:10] }}</span>
+                    <span>
+                        {% if v.is_active %}
+                        <span class="ai-badge ai-prioridad-baja">Activa</span>
+                        {% else %}
+                        <span class="ai-badge ai-tipo-spam">Inactiva</span>
+                        {% endif %}
+                    </span>
+                    <span>
+                        {% if not v.is_active %}
+                        <form method="post" action="/settings/ai/prompts/{{ selected_template.id }}/versions/{{ v.id }}/activate" style="display:inline;">
+                            <button type="submit" class="secondary-button" style="padding: 4px 10px; font-size: .8rem;">
+                                Activar
+                            </button>
+                        </form>
+                        {% endif %}
+                    </span>
+                </div>
+
+                <!-- System prompt preview (colapsable) -->
+                <div class="ai-versions-prompt-preview">
+                    <details>
+                        <summary>System prompt</summary>
+                        <pre class="ai-detail-pre" style="margin-top: 8px;">{{ v.system_prompt_template }}</pre>
+                    </details>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Formulario nueva versión -->
+        <div class="ai-config-form">
+            <h4 style="margin: 0 0 14px; color: var(--text-secondary);">Crear nueva versión</h4>
+            <form method="post" action="/settings/ai/prompts/{{ selected_template.id }}/versions" class="form-stack">
+                <label class="form-label ai-config-field">
+                    System prompt
+                    <small>Instrucciones para el modelo. Debe incluir el esquema JSON de respuesta.</small>
+                    <textarea class="form-input ai-prompt-textarea" name="system_prompt" rows="14" required
+                              placeholder="Eres un asistente...">{% if versions %}{{ versions[0].system_prompt_template }}{% endif %}</textarea>
+                </label>
+                <label class="form-label ai-config-field">
+                    Esquema del User Prompt (referencia)
+                    <small>Documentación del JSON que el servicio envía al modelo. No se usa como plantilla directamente.</small>
+                    <textarea class="form-input ai-prompt-textarea" name="user_prompt_template" rows="6"
+                              placeholder='{"campo": "valor", ...}'>{% if versions %}{{ versions[0].user_prompt_template }}{% endif %}</textarea>
+                </label>
+                <label class="form-label ai-config-field">
+                    Notas (opcional)
+                    <input class="form-input" type="text" name="notes" placeholder="Descripción del cambio...">
+                </label>
+                <div class="ai-config-actions form-actions">
+                    <button class="primary-button" type="submit">Guardar nueva versión</button>
+                </div>
+            </form>
+        </div>
+
+        {% else %}
+        <div class="pane-empty-state" style="padding: 60px 0;">
+            <div class="pane-empty-icon">📝</div>
+            <h2 style="margin: 0 0 8px;">Selecciona una plantilla</h2>
+            <p class="pane-empty-text">Elige una plantilla del panel izquierdo para ver y editar sus versiones.</p>
+        </div>
+        {% endif %}
+    </section>
+
+</main>
+{% endblock %}
