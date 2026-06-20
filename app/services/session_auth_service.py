@@ -32,6 +32,7 @@ class AuthenticatedSessionUser:
     can_update_glpi_ticket: bool
     can_link_tickets: bool
     can_manage_ai: bool
+    assistant_mode: bool = True
 
 
 def _now() -> datetime:
@@ -137,16 +138,17 @@ async def authenticate_session_user(
             login_identifier=clean_login,
             display_name=user.display_name,
             role=user.role,
-        auth_mode=user.auth_mode,
-        can_manage_users=bool(user.can_manage_users),
-        can_manage_account_config=bool(user.can_manage_account_config),
-        can_read_account_mail=bool(user.can_read_account_mail),
-        can_reply_from_account=bool(user.can_reply_from_account),
-        can_create_glpi_ticket=bool(user.can_create_glpi_ticket),
-        can_update_glpi_ticket=bool(user.can_update_glpi_ticket),
-        can_link_tickets=bool(user.can_link_tickets),
-        can_manage_ai=bool(user.can_manage_ai),
-    )
+            auth_mode=user.auth_mode,
+            can_manage_users=bool(user.can_manage_users),
+            can_manage_account_config=bool(user.can_manage_account_config),
+            can_read_account_mail=bool(user.can_read_account_mail),
+            can_reply_from_account=bool(user.can_reply_from_account),
+            can_create_glpi_ticket=bool(user.can_create_glpi_ticket),
+            can_update_glpi_ticket=bool(user.can_update_glpi_ticket),
+            can_link_tickets=bool(user.can_link_tickets),
+            can_manage_ai=bool(user.can_manage_ai),
+            assistant_mode=bool(user.assistant_mode) if user.assistant_mode is not None else True,
+        )
 
     account = db.execute(
         select(CollaborativeAccount).where(CollaborativeAccount.email == clean_login)
@@ -217,4 +219,5 @@ async def authenticate_session_user(
         can_update_glpi_ticket=bool(user.can_update_glpi_ticket),
         can_link_tickets=bool(user.can_link_tickets),
         can_manage_ai=bool(user.can_manage_ai),
+        assistant_mode=bool(user.assistant_mode) if user.assistant_mode is not None else True,
     )

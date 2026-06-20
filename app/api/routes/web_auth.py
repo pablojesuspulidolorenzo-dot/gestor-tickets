@@ -1,7 +1,10 @@
 import json
 
+import mimetypes
+import os
+
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -54,10 +57,14 @@ from app.services.mail_ingestion_service import (
     run_mail_ingestion_job,
 )
 from app.services.thread_service import (
+    copy_email_to_thread,
     create_thread_from_email,
+    fork_email_to_new_thread,
     get_active_thread_for_email,
     get_thread_detail,
+    list_active_threads_for_email,
     list_system_threads,
+    merge_thread_into,
 )
 from app.services.email_ai_processing_service import get_email_ai_result, process_email
 from app.services.thread_ai_synthesis_service import get_thread_ai_synthesis, synthesize_thread
@@ -114,12 +121,14 @@ SECTION_DEFINITIONS = {
 
 
 def _template_context(request: Request, **extra):
+    session_user = request.session.get("user") or {}
     context = {
         "request": request,
         "app_name": settings.APP_NAME,
         "app_env": settings.APP_ENV,
         "version": get_version_metadata(),
         "htmx_local": True,
+        "assistant_mode": bool(session_user.get("assistant_mode", True)),
     }
     context.update(extra)
     return context
@@ -214,6 +223,7 @@ async def login_submit(
             "can_update_glpi_ticket": user.can_update_glpi_ticket,
             "can_link_tickets": user.can_link_tickets,
             "can_manage_ai": user.can_manage_ai,
+            "assistant_mode": user.assistant_mode,
         }
 
         return RedirectResponse(url="/app", status_code=303)
@@ -305,6 +315,23 @@ def mailbox_page(
             status_code=400,
         )
 
+    # Módulo 7: cruce de inteligencia IMAP vs base de datos colaborativa
+    imap_intelligence: dict[str, str] = {}
+    if preview and preview.messages:
+        msg_ids = [m.message_id for m in preview.messages if m.message_id]
+        if msg_ids:
+            rows = db.execute(
+                text("""
+                    SELECT message_id_header, 'exact' AS match_type
+                    FROM gestor_tickets.email_messages
+                    WHERE account_id = :account_id
+                      AND message_id_header = ANY(:ids)
+                """),
+                {"account_id": int(user["account_id"]), "ids": msg_ids},
+            ).mappings().all()
+            for row in rows:
+                imap_intelligence[row["message_id_header"]] = row["match_type"]
+
     return templates.TemplateResponse(
         request=request,
         name="mailbox.html",
@@ -314,6 +341,7 @@ def mailbox_page(
             active_section="mailbox",
             preview=preview,
             safety_notes=SAFETY_NOTES,
+            imap_intelligence=imap_intelligence,
         ),
     )
 
@@ -466,6 +494,178 @@ def mailbox_message_create_thread_web(
         )
 
     return RedirectResponse(url="/threads", status_code=303)
+
+
+@router.get("/inbox", response_class=HTMLResponse)
+def inbox_page(
+    request: Request,
+    thread_id: int | None = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
+
+    page_size = 25
+    offset = (page - 1) * page_size
+    account_id = int(user["account_id"])
+
+    threads = list_system_threads(db, account_id=account_id)
+    total_threads = len(threads)
+    threads_page = threads[offset:offset + page_size]
+    has_more = (offset + page_size) < total_threads
+
+    selected_thread = None
+    thread_messages = []
+    thread_attachments = []
+    glpi_tickets = []
+    ai_thread_result = None
+
+    if thread_id:
+        try:
+            selected_thread, thread_messages = get_thread_detail(
+                db, account_id=account_id, thread_id=thread_id,
+            )
+            glpi_tickets = list_glpi_tickets_for_thread(
+                db, account_id=account_id, thread_id=thread_id,
+            )
+            ai_thread_result = get_thread_ai_synthesis(db, thread_id)
+            thread_attachments = _get_thread_attachments(db, account_id=account_id, thread_id=thread_id)
+        except ValueError:
+            pass
+
+    return templates.TemplateResponse(
+        request=request,
+        name="inbox.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="inbox",
+            threads=threads_page,
+            total_threads=total_threads,
+            page=page,
+            page_size=page_size,
+            has_more=has_more,
+            selected_thread=selected_thread,
+            thread_messages=thread_messages,
+            thread_attachments=thread_attachments,
+            glpi_tickets=glpi_tickets,
+            ai_thread_result=ai_thread_result,
+            thread_id=thread_id,
+        ),
+    )
+
+
+@router.get("/inbox/threads", response_class=HTMLResponse)
+def inbox_threads_partial(
+    request: Request,
+    page: int = 1,
+    db: Session = Depends(get_db),
+):
+    """Partial HTMX: carga más hilos para el scroll infinito."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
+
+    page_size = 25
+    offset = (page - 1) * page_size
+    account_id = int(user["account_id"])
+
+    threads = list_system_threads(db, account_id=account_id)
+    total_threads = len(threads)
+    threads_page = threads[offset:offset + page_size]
+    has_more = (offset + page_size) < total_threads
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/inbox_thread_rows.html",
+        context=_template_context(
+            request,
+            threads=threads_page,
+            page=page,
+            page_size=page_size,
+            has_more=has_more,
+        ),
+    )
+
+
+@router.get("/inbox/thread/{thread_id}", response_class=HTMLResponse)
+def inbox_thread_panel(
+    request: Request,
+    thread_id: int,
+    db: Session = Depends(get_db),
+):
+    """Partial HTMX: carga el panel derecho del hilo seleccionado."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
+
+    account_id = int(user["account_id"])
+
+    try:
+        thread, messages = get_thread_detail(db, account_id=account_id, thread_id=thread_id)
+        glpi_tickets = list_glpi_tickets_for_thread(db, account_id=account_id, thread_id=thread_id)
+        ai_thread_result = get_thread_ai_synthesis(db, thread_id)
+        thread_attachments = _get_thread_attachments(db, account_id=account_id, thread_id=thread_id)
+        all_threads = list_system_threads(db, account_id=account_id)
+    except ValueError:
+        return HTMLResponse("<p class='pane-empty-text'>Hilo no encontrado.</p>")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/inbox_thread_panel.html",
+        context=_template_context(
+            request,
+            user=user,
+            thread=thread,
+            messages=messages,
+            thread_attachments=thread_attachments,
+            glpi_tickets=glpi_tickets,
+            ai_thread_result=ai_thread_result,
+            all_threads=all_threads,
+        ),
+    )
+
+
+def _get_thread_attachments(db: Session, *, account_id: int, thread_id: int) -> list[dict]:
+    rows = db.execute(
+        text("""
+            SELECT DISTINCT
+                ea.id,
+                ea.email_message_id,
+                ea.filename,
+                ea.content_type,
+                ea.size_bytes,
+                ea.is_inline,
+                ea.content_id,
+                em.subject AS email_subject,
+                em.sent_at
+            FROM gestor_tickets.email_thread_members etm
+            JOIN gestor_tickets.email_messages em ON em.id = etm.email_message_id
+            JOIN gestor_tickets.email_attachments ea ON ea.email_message_id = em.id
+            JOIN gestor_tickets.system_threads st ON st.id = etm.thread_id
+            WHERE etm.thread_id = :thread_id
+              AND st.account_id = :account_id
+              AND etm.status = 'active'
+              AND ea.is_inline = false
+            ORDER BY em.sent_at, ea.filename
+        """),
+        {"thread_id": thread_id, "account_id": account_id},
+    ).mappings().all()
+    return [dict(r) for r in rows]
 
 
 @router.get("/threads", response_class=HTMLResponse)
@@ -1814,6 +2014,175 @@ def settings_update_glpi(
     except Exception as exc:
         return RedirectResponse(url=f"/settings?tab=glpi&error={exc}", status_code=303)
     return RedirectResponse(url="/settings?tab=glpi&message=saved", status_code=303)
+
+
+@router.get("/api/emails/{email_message_id}/ai-tags", response_class=HTMLResponse)
+def email_ai_tags(
+    request: Request,
+    email_message_id: int,
+    db: Session = Depends(get_db),
+):
+    """Partial HTMX: devuelve las etiquetas IA de un correo archivado."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return HTMLResponse("")
+    result = get_email_ai_result(db, email_message_id)
+    if not result or result.get("status") != "processed":
+        return HTMLResponse("")
+    tipo = result.get("tipo_correo", "")
+    prior = result.get("prioridad_sugerida", "")
+    accion = result.get("accion_sugerida", "")
+    html = (
+        f'<span class="ai-badge ai-tipo-{tipo.replace("_", "-")}">{tipo}</span> '
+        f'<span class="ai-badge ai-prioridad-{prior}">{prior}</span>'
+    )
+    if accion:
+        html += f'<span class="ai-hint" style="margin-left:6px;">{accion[:80]}</span>'
+    return HTMLResponse(html)
+
+
+@router.get("/api/emails/{email_message_id}/cid/{content_id:path}")
+def serve_inline_attachment(
+    request: Request,
+    email_message_id: int,
+    content_id: str,
+    db: Session = Depends(get_db),
+):
+    """Proxy seguro para imágenes incrustadas (cid:) referenciadas en correos archivados."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return Response(status_code=403)
+
+    row = db.execute(
+        text("""
+            SELECT ea.storage_path, ea.content_type, ea.filename
+            FROM gestor_tickets.email_attachments ea
+            JOIN gestor_tickets.email_messages em ON em.id = ea.email_message_id
+            WHERE ea.email_message_id = :email_id
+              AND ea.is_inline = true
+              AND em.account_id = :account_id
+              AND (ea.content_id = :cid OR ea.content_id = :cid_brackets)
+            LIMIT 1
+        """),
+        {
+            "email_id": email_message_id,
+            "account_id": int(user["account_id"]),
+            "cid": content_id,
+            "cid_brackets": f"<{content_id}>",
+        },
+    ).mappings().first()
+
+    if not row or not row["storage_path"]:
+        return Response(status_code=404)
+
+    path = row["storage_path"]
+    if not os.path.isfile(path):
+        return Response(status_code=404)
+
+    content_type = row["content_type"] or mimetypes.guess_type(path)[0] or "application/octet-stream"
+    return FileResponse(path, media_type=content_type)
+
+
+@router.post("/threads/{thread_id}/fork-email/{email_message_id}", response_class=HTMLResponse)
+def fork_email(
+    request: Request,
+    thread_id: int,
+    email_message_id: int,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    try:
+        new_thread = fork_email_to_new_thread(
+            db,
+            account_id=int(user["account_id"]),
+            source_thread_id=thread_id,
+            email_message_id=email_message_id,
+            user_id=int(user["user_id"]),
+        )
+        return RedirectResponse(url=f"/threads/{new_thread['id']}", status_code=303)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/threads/{thread_id}?error={exc}", status_code=303)
+
+
+@router.post("/threads/{thread_id}/copy-email/{email_message_id}", response_class=HTMLResponse)
+def copy_email(
+    request: Request,
+    thread_id: int,
+    email_message_id: int,
+    target_thread_id: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    try:
+        copy_email_to_thread(
+            db,
+            account_id=int(user["account_id"]),
+            target_thread_id=target_thread_id,
+            email_message_id=email_message_id,
+            user_id=int(user["user_id"]),
+        )
+        return RedirectResponse(url=f"/threads/{target_thread_id}?message=copied", status_code=303)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/threads/{thread_id}?error={exc}", status_code=303)
+
+
+@router.post("/threads/{thread_id}/merge-into/{target_thread_id}", response_class=HTMLResponse)
+def merge_thread(
+    request: Request,
+    thread_id: int,
+    target_thread_id: int,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    try:
+        result = merge_thread_into(
+            db,
+            account_id=int(user["account_id"]),
+            source_thread_id=thread_id,
+            target_thread_id=target_thread_id,
+            user_id=int(user["user_id"]),
+        )
+        return RedirectResponse(url=f"/threads/{result['id']}?message=merged", status_code=303)
+    except ValueError as exc:
+        return RedirectResponse(url=f"/threads/{thread_id}?error={exc}", status_code=303)
+
+
+@router.post("/settings/assistant-mode", response_class=HTMLResponse)
+def toggle_assistant_mode(request: Request, db: Session = Depends(get_db)):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    current = bool(user.get("assistant_mode", True))
+    new_value = not current
+
+    db.execute(
+        text("""
+            UPDATE gestor_tickets.account_users
+            SET assistant_mode = :v, updated_at = now()
+            WHERE id = :user_id
+        """),
+        {"v": new_value, "user_id": int(user["user_id"])},
+    )
+    db.commit()
+
+    session_data = dict(request.session["user"])
+    session_data["assistant_mode"] = new_value
+    request.session["user"] = session_data
+
+    label = "Asistente ON" if new_value else "Asistente OFF"
+    cls = "assistant-toggle is-on" if new_value else "assistant-toggle"
+    return HTMLResponse(
+        f'<button class="{cls}" hx-post="/settings/assistant-mode" '
+        f'hx-target="this" hx-swap="outerHTML" title="Modo asistente didáctico">'
+        f'{label}</button>'
+    )
 
 
 @router.get("/{section}", response_class=HTMLResponse)

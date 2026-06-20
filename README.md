@@ -7,13 +7,14 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 ## Estado Actual
 
 - Ruta del proyecto en servidor: `/var/www/vhosts/gestor-tickets.es/docker/`
-- Version actual de la app: `0.1.50`
+- Version actual de la app: `0.1.51`
 - Stack: FastAPI, Jinja2, HTMX, PostgreSQL 17, GLPI, MariaDB, IMAP, Docker Compose
 - Esquema PostgreSQL principal: `gestor_tickets`
 - Archivo SQL de referencia: `gestor_tickets_v2_schema_postgresql17_sin_triggers.sql`
 - El esquema se disena sin triggers de aplicacion; `updated_at` lo mantiene la aplicacion.
 - La fase IA actual gestiona endpoints/modelos, editor de prompts con versionado, visor de histórico LLM y permite analizar correos archivados (Contrato A) y sintetizar hilos (Contrato B). Los prompts se leen de BD (ai_prompt_versions) y el motor de fallback recorre endpoints activos por prioridad.
 - Navegación unificada: partial nav.html compartido en todos los templates; /settings nueva página con tabs Cuenta/IMAP/GLPI; Configuración IA bajo subnav; Tickets con filtros y enums GLPI; Cuentas con patrón sidebar; Ingesta con badges de estado.
+- v0.1.51: M1 (ingesta→IA automática), M3 (iframe sandbox + proxy CID), M4 (modo asistente con toggle en nav), M5 (superbandeja unificada /inbox con scroll infinito HTMX y Alpine.js), M6 (M:N hilos: fork/copiar/fusionar), M7 (inteligencia IMAP: marcado cromático de correos ya en BD).
 
 ## Reglas Criticas
 

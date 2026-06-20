@@ -732,3 +732,76 @@ a {
 .ingestion-run-badge.is-ok { background: #dcfce7; color: #166534; border-color: #86efac; }
 .ingestion-run-badge.is-err { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
 .ingestion-run-badge.is-running { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+
+/* ── Assistant Mode Toggle ───────────────────────────────────────── */
+.assistant-toggle { border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; background: #f1f5f9; color: var(--text-muted); font-size: .78rem; font-weight: 700; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.assistant-toggle.is-on { background: #eff6ff; color: var(--primary-dark); border-color: #bfdbfe; }
+.assistant-hint { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 10px 14px; font-size: .85rem; color: #1d4ed8; line-height: 1.5; }
+
+/* ── Superbandeja Unificada (Inbox) ──────────────────────────────── */
+.inbox-shell { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); height: calc(100vh - 64px); overflow: hidden; }
+.inbox-sidebar { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; background: var(--panel-soft); }
+.inbox-sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); background: #fff; }
+.inbox-sidebar-title { margin: 0; font-size: 1rem; font-weight: 800; }
+.inbox-thread-list { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+.inbox-thread-row { display: block; text-decoration: none; padding: 12px 14px; border-radius: 12px; border: 1px solid transparent; color: inherit; transition: background .12s, border-color .12s; }
+.inbox-thread-row:hover { background: #fff; border-color: var(--border); }
+.inbox-thread-row.is-selected, .inbox-thread-row:focus { background: #eff6ff; border-color: #bfdbfe; }
+.inbox-thread-row.is-ai-processing { opacity: .5; pointer-events: none; cursor: not-allowed; }
+.inbox-thread-row-top { display: flex; align-items: baseline; gap: 6px; }
+.inbox-thread-title { flex: 1; font-weight: 700; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-thread-date { font-size: .75rem; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+.inbox-thread-meta { display: flex; gap: 6px; margin-top: 3px; font-size: .78rem; color: var(--text-muted); }
+.inbox-thread-status.is-active { color: #16a34a; font-weight: 700; }
+.inbox-ai-indicator { color: var(--primary); animation: spin 1s linear infinite; font-size: .85rem; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.inbox-load-more { padding: 16px; text-align: center; color: var(--text-muted); font-size: .85rem; }
+.inbox-loading-indicator { display: inline-block; }
+
+.inbox-panel { overflow-y: auto; }
+.inbox-panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 22px 14px; border-bottom: 1px solid var(--border); background: #fff; }
+.inbox-panel-title { margin: 0 0 4px; font-size: 1.1rem; font-weight: 800; }
+.inbox-panel-meta { margin: 0; font-size: .82rem; color: var(--text-muted); }
+.inbox-panel-actions { flex-shrink: 0; }
+.inbox-panel-section { padding: 16px 22px; border-bottom: 1px solid var(--border); }
+.inbox-section-title { margin: 0 0 12px; font-size: .88rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+
+.inbox-view-toggle { display: flex; flex-direction: column; }
+.inbox-view-tabs { display: flex; gap: 4px; padding: 10px 22px; border-bottom: 1px solid var(--border); background: #f8fafc; }
+.inbox-view-tab { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: #fff; color: var(--text-secondary); font-weight: 750; font-size: .85rem; cursor: pointer; transition: background .12s, border-color .12s; }
+.inbox-view-tab.is-active, .inbox-view-tab[class~="is-active"] { background: #eff6ff; border-color: #bfdbfe; color: var(--primary-dark); }
+.inbox-synthesis-view, .inbox-emails-view { flex: 1; }
+
+.inbox-attachments-list { display: grid; gap: 6px; }
+.inbox-attachment-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.inbox-att-icon { font-size: 1.1rem; flex-shrink: 0; }
+.inbox-att-info { min-width: 0; }
+.inbox-att-name { display: block; font-weight: 650; font-size: .875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-att-meta { font-size: .78rem; color: var(--text-muted); }
+
+.inbox-email-item { padding: 14px 22px; border-bottom: 1px solid var(--border); }
+.inbox-email-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.inbox-email-from { font-size: .82rem; color: var(--text-muted); margin-bottom: 8px; }
+.inbox-email-preview { font-size: .8rem; color: var(--text-secondary); white-space: pre-wrap; background: #f8fafc; border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; max-height: 120px; overflow: hidden; }
+.inbox-email-ai-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; min-height: 22px; }
+.inbox-email-ops { margin-top: 10px; }
+.inbox-email-ops summary { font-size: .8rem; color: var(--text-muted); cursor: pointer; }
+.inbox-ops-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.inbox-dir-badge { display: inline-flex; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; margin-left: 6px; }
+.inbox-dir-badge.is-in { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.inbox-dir-badge.is-out { background: #f0fdf4; color: #166534; border: 1px solid #86efac; }
+
+.inbox-glpi-panel { background: #f8fafc; }
+.inbox-glpi-ticket { padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff; margin-bottom: 8px; }
+.inbox-glpi-create summary { color: var(--primary-dark); }
+
+@media (max-width: 900px) {
+    .inbox-shell { grid-template-columns: 1fr; height: auto; }
+    .inbox-sidebar { max-height: 340px; border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+/* ── IMAP Intelligence (Módulo 7) ────────────────────────────────── */
+.imap-intel-exact { background: #fefce8 !important; border-left: 3px solid #fbbf24 !important; }
+.imap-intel-badge { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 999px; font-size: .72rem; font-weight: 750; }
+.imap-intel-badge.is-exact { background: #fef9c3; color: #854d0e; border: 1px solid #fde047; }
+.imap-intel-badge.is-thread { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }

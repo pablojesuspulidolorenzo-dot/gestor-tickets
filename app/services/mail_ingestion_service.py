@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.email_archive_service import archive_message_from_imap_readonly
+from app.services.email_ai_processing_service import process_email as _ai_process_email
 from app.services.mailbox_preview_service import preview_unified_collaborative_mailbox
 from app.services.thread_service import create_thread_from_email
 
@@ -847,6 +848,7 @@ def run_mail_ingestion_job(
 
                 thread_info = None
                 ticket_sync = None
+                ai_result = None
                 if email_message_id:
                     thread, thread_changed = create_thread_from_email(
                         db,
@@ -859,6 +861,16 @@ def run_mail_ingestion_job(
                         "thread_id": thread.get("id"),
                         "thread_changed": thread_changed,
                     }
+
+                    try:
+                        ai_result = _ai_process_email(
+                            db,
+                            email_message_id=int(email_message_id),
+                            account_id=account_id,
+                            user_id=user_id,
+                        )
+                    except Exception as ai_exc:
+                        ai_result = {"ok": False, "error": str(ai_exc), "error_type": "ingestion_hook"}
 
                     ticket = _active_glpi_ticket_for_thread(
                         db,
@@ -884,6 +896,7 @@ def run_mail_ingestion_job(
                         "occurrence_id": occurrence_id,
                         "thread": thread_info,
                         "ticket_sync": ticket_sync,
+                        "ai": ai_result,
                     }
                 )
 

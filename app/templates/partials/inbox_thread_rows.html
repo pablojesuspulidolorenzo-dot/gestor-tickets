@@ -1,0 +1,35 @@
+{% for thread in threads %}
+{% set ai_pending = thread.get('ai_status') in ('pending', 'processing') %}
+<a class="inbox-thread-row{% if ai_pending %} is-ai-processing{% endif %}"
+   href="/inbox?thread_id={{ thread.id }}"
+   hx-get="/inbox/thread/{{ thread.id }}"
+   hx-target="#inbox-panel"
+   hx-swap="innerHTML"
+   hx-push-url="/inbox?thread_id={{ thread.id }}"
+   {% if ai_pending %}aria-disabled="true" tabindex="-1"{% endif %}>
+    <div class="inbox-thread-row-top">
+        <span class="inbox-thread-title">{{ thread.title or "(Sin asunto)" }}</span>
+        {% if ai_pending %}
+        <span class="inbox-ai-indicator" title="IA procesando…">⟳</span>
+        {% endif %}
+        {% if thread.last_message_at %}
+        <span class="inbox-thread-date">{{ (thread.last_message_at | string)[:16] }}</span>
+        {% endif %}
+    </div>
+    <div class="inbox-thread-meta">
+        <span>{{ thread.message_count }} correo{{ "s" if thread.message_count != 1 else "" }}</span>
+        <span>·</span>
+        <span class="inbox-thread-status {{ 'is-active' if thread.status == 'active' else '' }}">{{ thread.status }}</span>
+    </div>
+</a>
+{% endfor %}
+
+{% if has_more %}
+<div class="inbox-load-more"
+     hx-get="/inbox/threads?page={{ page + 1 }}"
+     hx-trigger="revealed"
+     hx-swap="outerHTML"
+     hx-target="this">
+    <span class="inbox-loading-indicator">Cargando más hilos…</span>
+</div>
+{% endif %}

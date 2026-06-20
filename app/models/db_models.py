@@ -237,6 +237,7 @@ class AccountUser(Base):
     can_update_glpi_ticket = Column(Boolean, nullable=False, server_default=text("false"))
     can_link_tickets = Column(Boolean, nullable=False, server_default=text("false"))
     can_manage_ai = Column(Boolean, nullable=False, server_default=text("false"))
+    assistant_mode = Column(Boolean, nullable=False, server_default=text("true"))
 
     failed_login_count = Column(Integer, nullable=False, server_default=text("0"))
     locked_until = Column(DateTime(timezone=True))
@@ -493,12 +494,6 @@ class SystemThread(Base):
 class EmailThreadMember(Base):
     __tablename__ = "email_thread_members"
     __table_args__ = (
-        Index(
-            "uq_email_one_active_thread",
-            "email_message_id",
-            unique=True,
-            postgresql_where=text("status = 'active'"),
-        ),
         Index(
             "uq_thread_active_email_once",
             "thread_id",

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Bandeja — Gestor Tickets{% endblock %}
+
+{% block content %}
+{% include "partials/nav.html" %}
+
+<main class="inbox-shell">
+
+    <!-- Columna izquierda: listado de hilos -->
+    <aside class="inbox-sidebar">
+        <div class="inbox-sidebar-header">
+            <h2 class="inbox-sidebar-title">Hilos</h2>
+            <span class="ticket-count-badge">{{ total_threads }}</span>
+        </div>
+
+        <div class="inbox-thread-list" id="inbox-thread-list">
+            {% include "partials/inbox_thread_rows.html" %}
+        </div>
+    </aside>
+
+    <!-- Columna derecha: panel de hilo -->
+    <section class="inbox-panel" id="inbox-panel">
+        {% if selected_thread %}
+            {% set thread = selected_thread %}
+            {% set messages = thread_messages %}
+            {% include "partials/inbox_thread_panel.html" %}
+        {% else %}
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">📨</div>
+            <h2 style="margin:0 0 8px;">Bandeja unificada</h2>
+            <p class="pane-empty-text">
+                Selecciona un hilo de la lista para ver sus correos, síntesis IA, adjuntos y tickets GLPI.
+            </p>
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="info-label">Hilos activos</div>
+                    <div class="info-value">{{ total_threads }}</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-label">Cuenta</div>
+                    <div class="info-value">{{ user.account_email }}</div>
+                </div>
+            </div>
+            {% if assistant_mode %}
+            <div class="assistant-hint" style="margin-top:16px;">
+                <strong>Modo asistente activo:</strong> Los botones críticos mostrarán explicaciones antes de ejecutar acciones irreversibles.
+                Puedes desactivarlo con el botón <em>Asistente ON</em> de la barra superior.
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </section>
+
+</main>
+{% endblock %}

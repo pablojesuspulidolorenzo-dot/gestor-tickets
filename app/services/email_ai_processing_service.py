@@ -111,7 +111,7 @@ def _save_processing_error(db: Session, record_id: int, error_message: str) -> N
     db.commit()
 
 
-def process_email(db: Session, email_message_id: int, account_id: int, user_id: int) -> dict:
+def process_email(db: Session, email_message_id: int, account_id: int, user_id: int | None) -> dict:
     """
     Analiza un correo archivado con IA (Contrato A).
     Retorna {"ok": True, "result": {...}} o {"ok": False, "error": "...", "error_type": "..."}

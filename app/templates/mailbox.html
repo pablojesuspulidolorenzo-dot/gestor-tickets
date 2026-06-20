@@ -14,34 +14,29 @@
         <div class="message-scroll-area">
             {% if preview.messages %}
                 {% for message in preview.messages %}
-                <a class="message-item mailbox-message-link" href="/mailbox/message?mailbox={{ message.mailbox|urlencode }}&uid={{ message.uid|urlencode }}">
+                {% set intel = imap_intelligence.get(message.message_id) if message.message_id else None %}
+                <a class="message-item mailbox-message-link {% if intel == 'exact' %}imap-intel-exact{% endif %}"
+                   href="/mailbox/message?mailbox={{ message.mailbox|urlencode }}&uid={{ message.uid|urlencode }}">
                     <div class="message-meta">
                         <span class="message-sender">
-                            {% if message.direction == "sent" %}
-                                Enviado
-                            {% else %}
-                                Recibido
-                            {% endif %}
+                            {% if message.direction == "sent" %}Enviado{% else %}Recibido{% endif %}
                             · {{ message.mailbox }}
                         </span>
-                        <span>UID {{ message.uid }}</span>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            {% if intel == 'exact' %}
+                            <span class="imap-intel-badge is-exact" title="Este correo ya está archivado en la cuenta colaborativa">✓ En BD</span>
+                            {% endif %}
+                            <span>UID {{ message.uid }}</span>
+                        </div>
                     </div>
                     <div class="message-subject">{{ message.subject }}</div>
                     <div class="message-snippet">
                         {{ message.date or "Sin fecha" }}
-                        {% if message.seen %}
-                            · leído
-                        {% else %}
-                            · no leído
-                        {% endif %}
+                        {% if message.seen %}· leído{% else %}· no leído{% endif %}
                     </div>
-                    <div class="message-snippet">
-                        De: {{ message.from_ }}
-                    </div>
+                    <div class="message-snippet">De: {{ message.from_ }}</div>
                     {% if message.to %}
-                    <div class="message-snippet">
-                        Para: {{ message.to }}
-                    </div>
+                    <div class="message-snippet">Para: {{ message.to }}</div>
                     {% endif %}
                 </a>
                 {% endfor %}

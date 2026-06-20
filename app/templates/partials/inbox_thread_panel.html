@@ -1,0 +1,231 @@
+{% set glpi_status_map = {1: "Nuevo", 2: "En proceso", 3: "Planificado", 4: "Pendiente", 5: "Resuelto", 6: "Cerrado"} %}
+{% set glpi_priority_map = {1: "Muy baja", 2: "Baja", 3: "Media", 4: "Alta", 5: "Muy alta", 6: "Mayor"} %}
+
+<div class="inbox-panel-header">
+    <div>
+        <h2 class="inbox-panel-title">{{ thread.title or "Hilo" }}</h2>
+        <p class="inbox-panel-meta">
+            {{ thread.message_count }} correo{{ "s" if thread.message_count != 1 else "" }}
+            {% if thread.last_message_at %}
+            · último: {{ (thread.last_message_at | string)[:16] }}
+            {% endif %}
+        </p>
+    </div>
+    <div class="inbox-panel-actions">
+        <span class="glpi-status-badge glpi-st-{{ '5' if thread.status == 'active' else '6' }}">{{ thread.status }}</span>
+    </div>
+</div>
+
+<!-- Toggle síntesis IA / correos reales -->
+<div class="inbox-view-toggle" x-data="{ view: 'synthesis' }">
+    <div class="inbox-view-tabs">
+        <button class="inbox-view-tab" :class="{ 'is-active': view === 'synthesis' }" @click="view = 'synthesis'">
+            Síntesis IA
+        </button>
+        <button class="inbox-view-tab" :class="{ 'is-active': view === 'emails' }" @click="view = 'emails'">
+            Correos reales
+        </button>
+    </div>
+
+    <!-- Vista síntesis IA -->
+    <div x-show="view === 'synthesis'" class="inbox-synthesis-view">
+
+        <!-- Explorador de adjuntos -->
+        {% if thread_attachments %}
+        <section class="inbox-panel-section">
+            <h3 class="inbox-section-title">Adjuntos del hilo ({{ thread_attachments|length }})</h3>
+            <div class="inbox-attachments-list">
+                {% for att in thread_attachments %}
+                <div class="inbox-attachment-item">
+                    <span class="inbox-att-icon">📎</span>
+                    <div class="inbox-att-info">
+                        <span class="inbox-att-name">{{ att.filename or "Sin nombre" }}</span>
+                        <span class="inbox-att-meta">
+                            {{ att.content_type or "?" }}
+                            {% if att.size_bytes %} · {{ (att.size_bytes / 1024)|round(1) }} KB{% endif %}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- Síntesis IA del hilo -->
+        <section class="inbox-panel-section">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+                <h3 class="inbox-section-title" style="margin:0;">Análisis IA del hilo</h3>
+                <button class="secondary-button"
+                        style="font-size:.8rem; padding:5px 12px;"
+                        hx-post="/threads/{{ thread.id }}/synthesize-ai"
+                        hx-target="#inbox-ai-result"
+                        hx-swap="innerHTML"
+                        hx-indicator="#inbox-ai-spinner">
+                    Sintetizar
+                </button>
+                <span id="inbox-ai-spinner" class="htmx-indicator ai-spinner"> IA…</span>
+            </div>
+
+            <div id="inbox-ai-result">
+                {% if ai_thread_result and ai_thread_result.status == 'processed' %}
+                {% with ok=True, result=ai_thread_result %}
+                {% include "partials/ai_thread_result.html" %}
+                {% endwith %}
+                {% elif ai_thread_result and ai_thread_result.status == 'error' %}
+                <div class="scheduled-alert scheduled-alert-error">
+                    Error IA: {{ ai_thread_result.error_message }}
+                </div>
+                {% else %}
+                <p class="pane-empty-text">Sin síntesis IA todavía. Pulsa "Sintetizar" para generarla.</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <!-- Cronología de correos (resúmenes) -->
+        {% if messages %}
+        <section class="inbox-panel-section">
+            <h3 class="inbox-section-title">Cronología del hilo</h3>
+            {% for msg in messages %}
+            <div class="timeline-item">
+                <div class="timeline-title">{{ msg.subject or "(Sin asunto)" }}</div>
+                <div class="timeline-meta">
+                    {{ (msg.sent_at | string)[:16] if msg.sent_at else "Sin fecha" }}
+                    · {{ msg.from_name or msg.from_email or "?" }}
+                    {% if msg.direction %}<span class="inbox-dir-badge {{ 'is-in' if msg.direction == 'inbound' else 'is-out' }}">{{ "Recibido" if msg.direction == "inbound" else "Enviado" }}</span>{% endif %}
+                </div>
+                {% if msg.body_text_preview %}
+                <p class="pane-empty-text" style="margin-top:4px;">{{ msg.body_text_preview[:200] }}{% if msg.body_text_preview|length > 200 %}…{% endif %}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+    </div>
+
+    <!-- Vista correos reales -->
+    <div x-show="view === 'emails'" style="display:none;" class="inbox-emails-view">
+        {% if messages %}
+        {% for msg in messages %}
+        <div class="inbox-email-item">
+            <div class="inbox-email-header">
+                <div>
+                    <strong>{{ msg.subject or "(Sin asunto)" }}</strong>
+                    <span class="inbox-dir-badge {{ 'is-in' if msg.direction == 'inbound' else 'is-out' }}">
+                        {{ "Recibido" if msg.direction == "inbound" else "Enviado" }}
+                    </span>
+                </div>
+                <div class="timeline-meta">
+                    {{ (msg.sent_at | string)[:16] if msg.sent_at else "Sin fecha" }}
+                </div>
+            </div>
+            <div class="inbox-email-from">De: {{ msg.from_name or msg.from_email or "?" }}</div>
+            {% if msg.body_text_preview %}
+            <pre class="inbox-email-preview">{{ msg.body_text_preview[:600] }}{% if msg.body_text_preview|length > 600 %}…{% endif %}</pre>
+            {% endif %}
+
+            <!-- Etiquetas IA del correo -->
+            {% set email_ai = namespace(result=None) %}
+            <div class="inbox-email-ai-tags" hx-get="/api/emails/{{ msg.email_message_id }}/ai-tags"
+                 hx-trigger="load" hx-swap="innerHTML">
+            </div>
+
+            <!-- Operaciones M:N -->
+            {% if all_threads %}
+            <details class="inbox-email-ops">
+                <summary>Operaciones de hilo</summary>
+                <div class="inbox-ops-grid">
+                    <form method="post" action="/threads/{{ thread.id }}/fork-email/{{ msg.email_message_id }}">
+                        <button class="secondary-button" type="submit" style="font-size:.8rem;"
+                            {% if assistant_mode %}
+                            onclick="return confirm('Bifurcar este correo creará un hilo nuevo y lo eliminará del hilo actual. ¿Continuar?')"
+                            {% endif %}>
+                            Bifurcar a nuevo hilo
+                        </button>
+                    </form>
+                    <form method="post" action="/threads/{{ thread.id }}/copy-email/{{ msg.email_message_id }}">
+                        <select name="target_thread_id" class="form-input" style="font-size:.8rem;">
+                            {% for t in all_threads if t.id != thread.id %}
+                            <option value="{{ t.id }}">Hilo #{{ t.id }}: {{ t.title[:40] if t.title else "(Sin título)" }}</option>
+                            {% endfor %}
+                        </select>
+                        <button class="secondary-button" type="submit" style="font-size:.8rem;">Copiar a hilo</button>
+                    </form>
+                </div>
+            </details>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="pane-empty-text">Este hilo no tiene correos archivados.</p>
+        {% endif %}
+
+        <!-- Fusión de hilos -->
+        {% if all_threads and all_threads|length > 1 %}
+        <section class="inbox-panel-section">
+            <h3 class="inbox-section-title">Fusionar este hilo</h3>
+            <p class="pane-empty-text">Todos los correos de este hilo se incorporarán al hilo destino y este quedará marcado como fusionado.</p>
+            <form method="post" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <select name="target" class="form-input" style="flex:1;"
+                        onchange="this.form.action='/threads/{{ thread.id }}/merge-into/' + this.value">
+                    <option value="">— Seleccionar hilo destino —</option>
+                    {% for t in all_threads if t.id != thread.id %}
+                    <option value="{{ t.id }}">Hilo #{{ t.id }}: {{ t.title[:50] if t.title else "(Sin título)" }}</option>
+                    {% endfor %}
+                </select>
+                <button class="primary-button" type="submit" style="font-size:.85rem;"
+                    {% if assistant_mode %}
+                    onclick="return confirm('Esta acción fusionará los correos en el hilo destino y marcará este como fusionado. Es reversible solo manualmente. ¿Continuar?')"
+                    {% endif %}>
+                    Fusionar
+                </button>
+            </form>
+        </section>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Panel GLPI (Módulo 8) -->
+<section class="inbox-panel-section inbox-glpi-panel">
+    <h3 class="inbox-section-title">Tickets GLPI vinculados</h3>
+
+    {% if glpi_tickets %}
+    {% for ticket in glpi_tickets %}
+    {% set st = ticket.status | int if ticket.status else 0 %}
+    {% set pr = ticket.priority | int if ticket.priority else 0 %}
+    <div class="inbox-glpi-ticket">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="glpi-status-badge glpi-st-{{ st }}">{{ glpi_status_map.get(st, "?") }}</span>
+            <span class="glpi-priority-badge glpi-pr-{{ pr }}">{{ glpi_priority_map.get(pr, "?") }}</span>
+            <strong>GLPI #{{ ticket.glpi_ticket_id }}</strong>
+        </div>
+        <p style="margin:4px 0 0; font-size:.875rem;">{{ ticket.title or "(Sin título)" }}</p>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="pane-empty-text">Sin tickets GLPI vinculados a este hilo.</p>
+    {% endif %}
+
+    <!-- Crear nuevo ticket GLPI asistido por IA -->
+    <details class="inbox-glpi-create" style="margin-top:14px;">
+        <summary style="cursor:pointer; font-weight:700; color:var(--primary-dark);">Crear ticket GLPI</summary>
+        <div style="margin-top:12px;">
+            {% if assistant_mode %}
+            <div class="assistant-hint">
+                <strong>Modo asistente:</strong> El título y la descripción se han pre-rellenado con la síntesis IA del hilo. Revísalos antes de enviar.
+            </div>
+            {% endif %}
+            <form method="post" action="/threads/{{ thread.id }}/glpi/create-ticket" class="form-stack">
+                <label class="form-label">
+                    Título del ticket
+                    <input class="form-input" type="text" name="title"
+                           value="{{ ai_thread_result.summary_json.resumen_ejecutivo[:120] if ai_thread_result and ai_thread_result.summary_json and ai_thread_result.summary_json.resumen_ejecutivo else thread.title or '' }}">
+                </label>
+                <label class="form-label">
+                    Contraseña GLPI
+                    <input class="form-input" type="password" name="glpi_password" required>
+                </label>
+                <button class="primary-button" type="submit">Crear ticket en GLPI</button>
+            </form>
+        </div>
+    </details>
+</section>

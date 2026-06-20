@@ -6,8 +6,7 @@
 
     <nav class="top-nav">
         <a href="/app" class="nav-btn {% if active_section == 'panel' %}active{% endif %}">Panel</a>
-        <a href="/mailbox" class="nav-btn {% if active_section == 'mailbox' %}active{% endif %}">Bandeja</a>
-        <a href="/threads" class="nav-btn {% if active_section == 'threads' %}active{% endif %}">Hilos</a>
+        <a href="/inbox" class="nav-btn {% if active_section in ('inbox', 'mailbox', 'threads') %}active{% endif %}">Bandeja</a>
         <a href="/tickets" class="nav-btn {% if active_section == 'tickets' %}active{% endif %}">Tickets GLPI</a>
         <a href="/ingestion" class="nav-btn {% if active_section == 'ingestion' %}active{% endif %}">Ingesta</a>
         <a href="/accounts" class="nav-btn {% if active_section == 'accounts' %}active{% endif %}">Cuentas</a>
@@ -15,6 +14,13 @@
     </nav>
 
     <div class="system-status">
+        <button class="{{ 'assistant-toggle is-on' if assistant_mode else 'assistant-toggle' }}"
+                hx-post="/settings/assistant-mode"
+                hx-target="this"
+                hx-swap="outerHTML"
+                title="Modo asistente didáctico — clic para activar/desactivar">
+            {{ "Asistente ON" if assistant_mode else "Asistente OFF" }}
+        </button>
         <span class="version-text">{{ version.full }}</span>
         <form method="post" action="/logout">
             <button class="logout-button">Salir</button>

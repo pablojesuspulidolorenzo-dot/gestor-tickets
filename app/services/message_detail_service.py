@@ -28,14 +28,12 @@ MESSAGE_DETAIL_SAFETY_NOTES = [
 ]
 
 
-ACTIVE_TAGS = {
+DANGEROUS_TAGS = {
     "script",
-    "iframe",
     "object",
     "embed",
     "applet",
     "base",
-    "link",
     "meta",
     "form",
     "input",
@@ -43,48 +41,31 @@ ACTIVE_TAGS = {
     "textarea",
     "select",
     "option",
+    "noscript",
 }
 
 ALLOWED_TAGS = [
-    "a",
-    "abbr",
-    "acronym",
-    "b",
-    "blockquote",
-    "br",
-    "code",
-    "div",
-    "em",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "hr",
-    "i",
-    "li",
-    "ol",
-    "p",
-    "pre",
-    "span",
-    "strong",
-    "table",
-    "tbody",
-    "td",
-    "th",
-    "thead",
-    "tr",
-    "u",
-    "ul",
+    "a", "abbr", "acronym", "b", "blockquote", "br", "caption", "cite",
+    "code", "col", "colgroup", "div", "em", "font",
+    "h1", "h2", "h3", "h4", "h5", "h6",
+    "hr", "i", "img", "li", "ol", "p", "pre", "s", "small", "span",
+    "strike", "strong", "sub", "sup",
+    "table", "tbody", "td", "tfoot", "th", "thead", "tr",
+    "u", "ul",
 ]
 
 ALLOWED_ATTRIBUTES = {
-    "a": ["href", "title", "target", "rel"],
+    "*": ["class", "style", "id", "dir", "lang", "width", "height", "align", "valign",
+          "bgcolor", "color", "border", "cellpadding", "cellspacing"],
+    "a": ["href", "title", "target", "rel", "name"],
     "abbr": ["title"],
     "acronym": ["title"],
-    "td": ["colspan", "rowspan"],
-    "th": ["colspan", "rowspan"],
+    "img": ["src", "alt", "title", "width", "height", "style"],
+    "table": ["summary", "width", "border", "cellpadding", "cellspacing", "bgcolor"],
+    "td": ["colspan", "rowspan", "width", "nowrap"],
+    "th": ["colspan", "rowspan", "width"],
+    "col": ["span", "width"],
+    "font": ["face", "size", "color"],
 }
 
 
@@ -257,14 +238,34 @@ def _extract_bodies(message) -> tuple[str | None, str | None]:
     return text_body, html_body
 
 
-def sanitize_html_body(html_body: str | None) -> tuple[str | None, bool]:
+def sanitize_html_body(
+    html_body: str | None,
+    *,
+    email_message_id: int | None = None,
+) -> tuple[str | None, bool]:
+    """
+    Sanitiza el HTML del correo para renderizado seguro en iframe sandbox.
+    Permite estilos inline y atributos de presentación (alta fidelidad visual).
+    Elimina tags activos peligrosos y eventos JavaScript.
+    Si email_message_id se proporciona, reemplaza referencias cid: con URLs proxy.
+    """
     if not html_body:
         return None, False
 
     blocked = False
     soup = BeautifulSoup(html_body, "html.parser")
 
-    for tag in soup.find_all(ACTIVE_TAGS):
+    for tag in soup.find_all(DANGEROUS_TAGS):
+        tag.decompose()
+        blocked = True
+
+    # Eliminar también iframe (renderizaremos en nuestro propio iframe)
+    for tag in soup.find_all("iframe"):
+        tag.decompose()
+        blocked = True
+
+    # Eliminar link CSS externo (solo permitimos estilos inline)
+    for tag in soup.find_all("link"):
         tag.decompose()
         blocked = True
 
@@ -278,24 +279,26 @@ def sanitize_html_body(html_body: str | None) -> tuple[str | None, bool]:
                 blocked = True
                 continue
 
-            if attr_lower == "style":
-                del tag.attrs[attr]
-                blocked = True
-                continue
-
-            if attr_lower in {"href", "src", "xlink:href", "formaction"}:
+            if attr_lower in {"href", "src", "xlink:href", "formaction", "action", "data"}:
                 values = value if isinstance(value, list) else [value]
-                joined = " ".join(str(item) for item in values).strip().lower()
+                joined = " ".join(str(item) for item in values).strip()
 
-                if joined.startswith(("javascript:", "vbscript:", "data:", "file:")):
+                joined_lower = joined.lower()
+                if joined_lower.startswith(("javascript:", "vbscript:", "file:")):
                     del tag.attrs[attr]
                     blocked = True
+                    continue
+
+                if joined_lower.startswith("cid:") and email_message_id:
+                    cid_value = joined[4:].strip()
+                    tag.attrs[attr] = f"/api/emails/{email_message_id}/cid/{cid_value}"
+                    continue
 
     cleaned = bleach.clean(
         str(soup),
         tags=ALLOWED_TAGS,
         attributes=ALLOWED_ATTRIBUTES,
-        protocols=["http", "https", "mailto", "tel"],
+        protocols=["http", "https", "mailto", "tel", "data"],
         strip=True,
     )
 

@@ -110,8 +110,9 @@
             {% endif %}
 
             {% if message.blocked_active_content %}
-            <div class="scheduled-alert scheduled-alert-error" style="margin: 18px 0;">
-                Se ha bloqueado contenido activo o potencialmente peligroso del HTML del correo.
+            <div class="scheduled-alert scheduled-alert-error" style="margin: 18px 0; display:flex; align-items:center; gap:10px;">
+                <span style="font-size:1.2rem;">🛡️</span>
+                <span><strong>Contenido bloqueado</strong> — Se ha detectado y eliminado código activo (scripts, iframes u objetos) en este correo para proteger tu sesión.</span>
             </div>
             {% endif %}
 
@@ -134,15 +135,18 @@
                 </div>
             </div>
 
-            <section class="email-body-card">
+            <section class="email-body-card" style="padding:0; overflow:hidden;">
                 {% if message.sanitized_html_body %}
-                    <div class="email-html-body">
-                        {{ message.sanitized_html_body | safe }}
-                    </div>
+                    <iframe
+                        sandbox="allow-popups allow-same-origin"
+                        srcdoc="{{ message.sanitized_html_body | e }}"
+                        style="width:100%; min-height:400px; border:none; display:block;"
+                        onload="this.style.minHeight = this.contentDocument.body.scrollHeight + 'px'">
+                    </iframe>
                 {% elif message.text_body %}
-                    <pre class="email-text-body">{{ message.text_body }}</pre>
+                    <pre class="email-text-body" style="padding:18px;">{{ message.text_body }}</pre>
                 {% else %}
-                    <p class="pane-empty-text">El mensaje no contiene cuerpo de texto visible.</p>
+                    <p class="pane-empty-text" style="padding:18px;">El mensaje no contiene cuerpo de texto visible.</p>
                 {% endif %}
             </section>
 
