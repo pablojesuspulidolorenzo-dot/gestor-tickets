@@ -2090,8 +2090,10 @@ def email_viewer_panel(
     blocked_active_content = False
 
     try:
+        import base64 as _b64
         raw = Path(eml_path).read_bytes()
         parsed = email_lib.message_from_bytes(raw, policy=email_default)
+        cid_map: dict[str, str] = {}
         for part in parsed.walk():
             ct = part.get_content_type()
             if ct == "text/html" and html_body is None:
@@ -2109,9 +2111,20 @@ def email_viewer_panel(
                 except Exception:
                     text_body = payload.decode("latin-1", errors="replace")
 
+            # Extraer imágenes embebidas (CID) → data URIs
+            raw_cid = part.get("Content-ID", "").strip()
+            if raw_cid and part.get_content_maintype() == "image":
+                img_payload = part.get_payload(decode=True)
+                if img_payload:
+                    cid_clean = raw_cid.strip("<>")
+                    b64 = _b64.b64encode(img_payload).decode("ascii")
+                    data_uri = f"data:{ct};base64,{b64}"
+                    cid_map[cid_clean] = data_uri
+                    cid_map[raw_cid] = data_uri
+
         if html_body:
             html_body, blocked_active_content = sanitize_html_body(
-                html_body, email_message_id=email_message_id
+                html_body, cid_map=cid_map or None
             )
     except Exception:
         pass
@@ -2145,13 +2158,24 @@ def email_viewer_panel(
     if html_body:
         import html as html_lib
         srcdoc = html_lib.escape(html_body, quote=True)
+        frame_id = f"eml-frame-{email_message_id}"
         body_section = (
             f'{blocked_banner}'
-            f'<iframe class="inbox-email-iframe" '
+            f'<iframe class="inbox-email-iframe" id="{frame_id}" '
             f'sandbox="allow-popups allow-same-origin" '
             f'srcdoc="{srcdoc}" '
-            f'style="width:100%;min-height:420px;border:none;display:block;">'
+            f'style="width:100%;min-height:200px;border:none;display:block;">'
             f'</iframe>'
+            f'<script>(function(){{'
+            f'var f=document.getElementById("{frame_id}");'
+            f'if(!f)return;'
+            f'function rsz(){{'
+            f'try{{var d=f.contentDocument||f.contentWindow.document;'
+            f'var h=d.documentElement.scrollHeight||d.body.scrollHeight;'
+            f'if(h>100)f.style.height=h+"px";}}catch(e){{}}'
+            f'}}'
+            f'f.addEventListener("load",function(){{rsz();setTimeout(rsz,400);}});'
+            f'}})();</script>'
         )
     elif text_body:
         import html as html_lib

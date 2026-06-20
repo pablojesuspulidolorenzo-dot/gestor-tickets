@@ -12,7 +12,7 @@
 </div>
 
 <div class="inbox-email-cards-list">
-    {% for msg in messages %}
+    {% for msg in messages | reverse %}
     {% set mid = msg.email_message_id %}
     <div class="inbox-email-card"
          :class="{ 'is-selected': selectedEmailId === {{ mid }} }"
