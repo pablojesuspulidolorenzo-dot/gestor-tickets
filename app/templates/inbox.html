@@ -5,10 +5,12 @@
 {% block content %}
 {% include "partials/nav.html" %}
 
-<main class="inbox-shell">
+<main class="inbox-shell"
+      x-data="{ view: 'synthesis', selectedEmailId: null }"
+      :class="{ 'inbox-emails-mode': view === 'emails' }">
 
-    <!-- Columna izquierda: listado de hilos -->
-    <aside class="inbox-sidebar">
+    <!-- Columna izquierda: listado de hilos (se oculta en vista Correos reales) -->
+    <aside class="inbox-sidebar" x-show="view !== 'emails'" x-cloak>
         <div class="inbox-sidebar-header">
             <h2 class="inbox-sidebar-title">Hilos</h2>
             <span class="ticket-count-badge">{{ total_threads }}</span>

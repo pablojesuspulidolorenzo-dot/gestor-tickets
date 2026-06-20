@@ -2,28 +2,38 @@
 {% set glpi_priority_map = {1: "Muy baja", 2: "Baja", 3: "Media", 4: "Alta", 5: "Muy alta", 6: "Mayor"} %}
 
 <div class="inbox-panel-header">
-    <div>
-        <h2 class="inbox-panel-title">{{ thread.title or "Hilo" }}</h2>
-        <p class="inbox-panel-meta">
-            {{ thread.message_count }} correo{{ "s" if thread.message_count != 1 else "" }}
-            {% if thread.last_message_at %}
-            · último: {{ (thread.last_message_at | string)[:16] }}
-            {% endif %}
-        </p>
+    <div style="display:flex; align-items:flex-start; gap:10px;">
+        <!-- Botón volver a hilos — solo visible en modo correos reales -->
+        <button class="inbox-back-btn"
+                x-show="view === 'emails'"
+                x-cloak
+                @click="view = 'synthesis'"
+                title="Volver a la lista de hilos">
+            ←
+        </button>
+        <div>
+            <h2 class="inbox-panel-title">{{ thread.title or "Hilo" }}</h2>
+            <p class="inbox-panel-meta">
+                {{ thread.message_count }} correo{{ "s" if thread.message_count != 1 else "" }}
+                {% if thread.last_message_at %}
+                · último: {{ (thread.last_message_at | string)[:16] }}
+                {% endif %}
+            </p>
+        </div>
     </div>
     <div class="inbox-panel-actions">
         <span class="glpi-status-badge glpi-st-{{ '5' if thread.status == 'active' else '6' }}">{{ thread.status }}</span>
     </div>
 </div>
 
-<!-- Toggle síntesis IA / correos reales -->
-<div class="inbox-view-toggle" x-data="{ view: 'synthesis', selectedEmailId: null }">
+<!-- Toggle síntesis IA / correos reales — el estado vive en <main x-data> (inbox.html) -->
+<div class="inbox-view-toggle">
     <div class="inbox-view-tabs">
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'synthesis' }" @click="view = 'synthesis'">
             Síntesis IA
         </button>
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'emails' }"
-                @click="view = 'emails'; if (!selectedEmailId && {{ messages[0].email_message_id if messages else 'null' }}) { selectedEmailId = {{ messages[0].email_message_id if messages else 'null' }} }">
+                @click="view = 'emails'; selectedEmailId = selectedEmailId || {{ messages[0].email_message_id if messages else 'null' }}">
             Correos reales
             {% if messages %}<span class="inbox-tab-count">{{ messages|length }}</span>{% endif %}
         </button>
