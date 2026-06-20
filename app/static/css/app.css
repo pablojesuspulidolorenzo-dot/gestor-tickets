@@ -860,8 +860,8 @@ body:has(.inbox-shell) .inbox-shell { flex: 1; min-height: 0; height: auto; }
 
 /* Pestañas */
 .inbox-view-toggle { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
-.inbox-view-tabs { display: flex; gap: 4px; padding: 10px 22px; border-bottom: 1px solid var(--border); background: #f8fafc; flex-shrink: 0; transition: padding .18s, background .18s; }
-.inbox-view-tab { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: #fff; color: var(--text-secondary); font-weight: 750; font-size: .85rem; cursor: pointer; transition: background .12s, border-color .12s, padding .18s, font-size .18s; }
+.inbox-view-tabs { display: flex; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--border); background: #f8fafc; flex-shrink: 0; transition: padding .18s, background .18s; flex-wrap: wrap; }
+.inbox-view-tab { border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px; background: #fff; color: var(--text-secondary); font-weight: 750; font-size: .82rem; cursor: pointer; transition: background .12s, border-color .12s, padding .18s, font-size .18s; white-space: nowrap; }
 .inbox-view-tab.is-active { background: #eff6ff; border-color: #bfdbfe; color: var(--primary-dark); }
 .inbox-tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 999px; background: var(--primary-dark); color: #fff; font-size: .68rem; font-weight: 800; padding: 0 4px; margin-left: 5px; }
 

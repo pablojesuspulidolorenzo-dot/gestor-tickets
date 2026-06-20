@@ -7,7 +7,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 ## Estado Actual
 
 - Ruta del proyecto en servidor: `/var/www/vhosts/gestor-tickets.es/docker/`
-- Version actual de la app: `0.1.60`
+- Version actual de la app: `0.1.61`
 - Stack: FastAPI, Jinja2, HTMX, PostgreSQL 17, GLPI, MariaDB, IMAP, Docker Compose
 - Esquema PostgreSQL principal: `gestor_tickets`
 - Archivo SQL de referencia: `gestor_tickets_v2_schema_postgresql17_sin_triggers.sql`
@@ -24,6 +24,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 - v0.1.58: corrección bug "correos del hilo equivocado" — HTMX OOB swap actualiza inbox-email-list-sidebar al cambiar de hilo; nuevo partial inbox_email_list_sidebar.html; ruta /inbox/thread/{id} pasa include_email_sidebar_oob=True y threads=all_threads.
 - v0.1.59: correos reales ordenados de más reciente a más antiguo; imágenes CID embebidas renderizadas vía data URI (extraídas del .eml, no requieren tabla email_attachments); sanitizador permite <style>/<html>/<head>/<body> para mayor fidelidad visual; iframe auto-redimensionable.
 - v0.1.60: auto-selección del correo más reciente al abrir "Correos reales"; menú ⋮ ampliado con Responder/Responder a todos/Reenviar (mailto:), Ignorar en este hilo y Eliminar del hilo (rojo); nuevos endpoints POST ignore-email y remove-email.
+- v0.1.61: panel de síntesis dividido en 4 pestañas independientes: Síntesis IA, Cronología (con contador), Tickets GLPI (con contador), Correos reales; header del hilo visible en todas las vistas excepto correos.
 
 ## Reglas Criticas
 

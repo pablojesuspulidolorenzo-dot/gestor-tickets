@@ -1,8 +1,8 @@
 {% set glpi_status_map = {1: "Nuevo", 2: "En proceso", 3: "Planificado", 4: "Pendiente", 5: "Resuelto", 6: "Cerrado"} %}
 {% set glpi_priority_map = {1: "Muy baja", 2: "Baja", 3: "Media", 4: "Alta", 5: "Muy alta", 6: "Mayor"} %}
 
-<!-- Header solo visible en síntesis; desaparece al ver correos para maximizar el visor -->
-<div class="inbox-panel-header" x-show="view === 'synthesis'" x-cloak>
+<!-- Header: visible en todas las vistas excepto correos para no reducir el espacio del visor -->
+<div class="inbox-panel-header" x-show="view !== 'emails'" x-cloak>
     <div>
         <h2 class="inbox-panel-title">{{ thread.title or "Hilo" }}</h2>
         <p class="inbox-panel-meta">
@@ -17,17 +17,30 @@
     </div>
 </div>
 
-<!-- Pestañas — pills ultracompactos en modo correos (is-compact via Alpine) -->
+<!-- Pestañas — 4 vistas; pills ultracompactos en modo correos -->
 <div class="inbox-view-toggle">
     <div class="inbox-view-tabs" :class="{ 'is-compact': view === 'emails' }">
+
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'synthesis' }" @click="view = 'synthesis'">
             Síntesis IA
         </button>
+
+        <button class="inbox-view-tab" :class="{ 'is-active': view === 'timeline' }" @click="view = 'timeline'">
+            Cronología
+            {% if messages %}<span class="inbox-tab-count">{{ messages|length }}</span>{% endif %}
+        </button>
+
+        <button class="inbox-view-tab" :class="{ 'is-active': view === 'glpi' }" @click="view = 'glpi'">
+            Tickets GLPI
+            {% if glpi_tickets %}<span class="inbox-tab-count">{{ glpi_tickets|length }}</span>{% endif %}
+        </button>
+
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'emails' }"
                 @click="view = 'emails'; selectedEmailId = selectedEmailId || {{ (messages | last).email_message_id if messages else 'null' }}">
             Correos reales
             {% if messages %}<span class="inbox-tab-count">{{ messages|length }}</span>{% endif %}
         </button>
+
     </div>
 
     <!-- ══ VISTA SÍNTESIS IA ══════════════════════════════════════════ -->
@@ -84,10 +97,14 @@
             </div>
         </section>
 
-        <!-- Cronología de correos (resúmenes) -->
-        {% if messages %}
+    </div><!-- /vista síntesis -->
+
+    <!-- ══ VISTA CRONOLOGÍA ═══════════════════════════════════════════ -->
+    <div x-show="view === 'timeline'" style="display:none;" class="inbox-synthesis-view">
+
         <section class="inbox-panel-section">
             <h3 class="inbox-section-title">Cronología del hilo</h3>
+            {% if messages %}
             {% for msg in messages %}
             <div class="timeline-item">
                 <div class="timeline-title">{{ msg.subject or "(Sin asunto)" }}</div>
@@ -107,10 +124,16 @@
                 {% endif %}
             </div>
             {% endfor %}
+            {% else %}
+            <p class="pane-empty-text">Este hilo no tiene correos archivados.</p>
+            {% endif %}
         </section>
-        {% endif %}
 
-        <!-- Panel GLPI (dentro de la vista síntesis) -->
+    </div><!-- /vista cronología -->
+
+    <!-- ══ VISTA TICKETS GLPI ═════════════════════════════════════════ -->
+    <div x-show="view === 'glpi'" style="display:none;" class="inbox-synthesis-view">
+
         <section class="inbox-panel-section inbox-glpi-panel">
             <h3 class="inbox-section-title">Tickets GLPI vinculados</h3>
 
@@ -155,11 +178,10 @@
             </details>
         </section>
 
-    </div><!-- /vista síntesis -->
+    </div><!-- /vista glpi -->
 
     <!-- ══ VISTA CORREOS REALES ═══════════════════════════════════════ -->
-    <!-- La lista de correos está en <aside class="inbox-email-list-sidebar"> (inbox.html) -->
-    <!-- Este panel ocupa el 100 % de la columna derecha con el visor de alta fidelidad -->
+    <!-- La lista de correos está en <aside id="inbox-email-list-sidebar"> (inbox.html) -->
     <div x-show="view === 'emails'" style="display:none;" class="inbox-emails-view">
 
         <div id="inbox-email-viewer" class="inbox-email-viewer-inner">
@@ -185,9 +207,7 @@
     </div><!-- /vista correos reales -->
 </div><!-- /inbox-view-toggle -->
 
-{# OOB swap: actualiza la sidebar de correos cuando HTMX carga un hilo distinto.
-   Solo se renderiza cuando la ruta lo pide (include_email_sidebar_oob=True),
-   no cuando el partial se incluye directamente desde inbox.html. #}
+{# OOB swap: actualiza la sidebar de correos cuando HTMX carga un hilo distinto. #}
 {% if include_email_sidebar_oob %}
 <aside id="inbox-email-list-sidebar"
        class="inbox-email-list-sidebar"
