@@ -642,7 +642,9 @@ def inbox_thread_panel(
             thread_attachments=thread_attachments,
             glpi_tickets=glpi_tickets,
             ai_thread_result=ai_thread_result,
+            threads=all_threads,
             all_threads=all_threads,
+            include_email_sidebar_oob=True,
         ),
     )
 

@@ -1,0 +1,59 @@
+{# Context esperado: thread, messages, threads (lista completa para fusión) #}
+<div class="inbox-sidebar-header" style="gap:10px;">
+    <button class="inbox-back-btn" @click="view = 'synthesis'" title="Volver a la lista de hilos">←</button>
+    <div style="min-width:0;">
+        <h2 class="inbox-sidebar-title" style="font-size:.88rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            {{ thread.title or "Hilo" }}
+        </h2>
+        <p class="inbox-panel-meta" style="margin:0;">
+            {{ messages|length }} correo{{ "s" if messages|length != 1 else "" }}
+        </p>
+    </div>
+</div>
+
+<div class="inbox-email-cards-list">
+    {% for msg in messages %}
+    {% set mid = msg.email_message_id %}
+    <div class="inbox-email-card"
+         :class="{ 'is-selected': selectedEmailId === {{ mid }} }"
+         @click="selectedEmailId = {{ mid }}"
+         hx-get="/api/emails/{{ mid }}/viewer-panel?thread_id={{ thread.id }}"
+         hx-target="#inbox-email-viewer"
+         hx-swap="innerHTML"
+         hx-trigger="click">
+        <div class="inbox-card-top">
+            <span class="inbox-dir-badge {{ 'is-in' if msg.direction == 'inbound' else 'is-out' }}">
+                {{ "↓" if msg.direction == "inbound" else "↑" }}
+            </span>
+            <span class="inbox-card-from">{{ (msg.from_name or msg.from_email or "?")[:26] }}</span>
+            <span class="inbox-card-date">{{ (msg.sent_at | string)[5:16] if msg.sent_at else "—" }}</span>
+        </div>
+        <div class="inbox-card-subject">{{ (msg.subject or "(Sin asunto)")[:58] }}</div>
+        {% if msg.body_text_preview %}
+        <div class="inbox-card-preview">{{ msg.body_text_preview[:80] }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+{% if threads and threads|length > 1 %}
+<details class="inbox-merge-details">
+    <summary>Fusionar hilo…</summary>
+    <form method="post" class="inbox-merge-form">
+        <select name="target" class="form-input"
+                onchange="this.form.action='/threads/{{ thread.id }}/merge-into/' + this.value">
+            <option value="">— Hilo destino —</option>
+            {% for t in threads if t.id != thread.id %}
+            <option value="{{ t.id }}">Hilo #{{ t.id }}: {{ (t.title or "(Sin título)")[:35] }}</option>
+            {% endfor %}
+        </select>
+        <button class="primary-button" type="submit"
+                style="width:100%; margin-top:6px; font-size:.8rem;"
+                {% if assistant_mode %}
+                onclick="return confirm('Esta acción fusionará los correos en el hilo destino y marcará este como fusionado. ¿Continuar?')"
+                {% endif %}>
+            Fusionar
+        </button>
+    </form>
+</details>
+{% endif %}

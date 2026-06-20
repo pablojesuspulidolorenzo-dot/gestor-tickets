@@ -184,3 +184,17 @@
 
     </div><!-- /vista correos reales -->
 </div><!-- /inbox-view-toggle -->
+
+{# OOB swap: actualiza la sidebar de correos cuando HTMX carga un hilo distinto.
+   Solo se renderiza cuando la ruta lo pide (include_email_sidebar_oob=True),
+   no cuando el partial se incluye directamente desde inbox.html. #}
+{% if include_email_sidebar_oob %}
+<aside id="inbox-email-list-sidebar"
+       class="inbox-email-list-sidebar"
+       hx-swap-oob="outerHTML:#inbox-email-list-sidebar"
+       x-show="view === 'emails'"
+       x-cloak
+       x-init="selectedEmailId = null">
+    {% include "partials/inbox_email_list_sidebar.html" %}
+</aside>
+{% endif %}
