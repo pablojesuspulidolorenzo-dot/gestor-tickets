@@ -5,7 +5,7 @@
 {% block content %}
 {% include "partials/nav.html" %}
 
-<main class="inbox-shell" x-data="{ view: 'synthesis', selectedEmailId: null }">
+<main class="inbox-shell" x-data="{ view: 'synthesis', selectedEmailId: null }" style="--sidebar-w: 340px">
 
     <!-- Columna izquierda A: listado de hilos (solo en modo Síntesis) -->
     <aside class="inbox-sidebar" x-show="view !== 'emails'" x-cloak>
@@ -92,6 +92,9 @@
     </aside>
     {% endif %}
 
+    <!-- Divisor arrastrable -->
+    <div class="inbox-resizer" id="inbox-resizer" title="Arrastra para ajustar el ancho"></div>
+
     <!-- Columna derecha: panel de hilo (síntesis o visor) -->
     <section class="inbox-panel" id="inbox-panel">
         {% if selected_thread %}
@@ -126,4 +129,37 @@
     </section>
 
 </main>
+
+<script>
+(function () {
+    var resizer = document.getElementById('inbox-resizer');
+    if (!resizer) return;
+    var shell = resizer.closest('.inbox-shell');
+    var startX = 0, startW = 340, dragging = false;
+
+    resizer.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        startX = e.clientX;
+        startW = parseInt(getComputedStyle(shell).getPropertyValue('--sidebar-w')) || 340;
+        dragging = true;
+        resizer.classList.add('is-dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', function (e) {
+        if (!dragging) return;
+        var newW = Math.max(200, Math.min(580, startW + (e.clientX - startX)));
+        shell.style.setProperty('--sidebar-w', newW + 'px');
+    });
+
+    document.addEventListener('mouseup', function () {
+        if (!dragging) return;
+        dragging = false;
+        resizer.classList.remove('is-dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+})();
+</script>
 {% endblock %}

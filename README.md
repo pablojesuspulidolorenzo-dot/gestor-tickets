@@ -7,7 +7,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 ## Estado Actual
 
 - Ruta del proyecto en servidor: `/var/www/vhosts/gestor-tickets.es/docker/`
-- Version actual de la app: `0.1.55`
+- Version actual de la app: `0.1.56`
 - Stack: FastAPI, Jinja2, HTMX, PostgreSQL 17, GLPI, MariaDB, IMAP, Docker Compose
 - Esquema PostgreSQL principal: `gestor_tickets`
 - Archivo SQL de referencia: `gestor_tickets_v2_schema_postgresql17_sin_triggers.sql`
@@ -19,6 +19,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 - v0.1.53: rediseño vista "Correos reales" en superbandeja: layout sub-dos columnas (lista compacta 32% + visor iframe de alta fidelidad 68%), selección con Alpine.js, carga HTMX on-click y autoload del primer correo; nueva ruta /api/emails/{id}/viewer-panel.
 - v0.1.54: corrección crítica de scope Alpine: x-data elevado a <main class="inbox-shell">, sidebar con x-show="view!=='emails'" + x-cloak, .inbox-emails-mode colapsa grid a 1fr, botón ← para volver a lista de hilos.
 - v0.1.55: reestructuración final tipo Outlook: col-izq alterna entre sidebar-hilos (síntesis) y sidebar-correos (emails); panel GLPI integrado dentro de x-show="view==='synthesis'"; visor ocupa el 100% de la col-der sin sub-columnas.
+- v0.1.56: scroll independiente por panel (min-height:0 en cadena flex) + divisor arrastrable entre columnas (JS nativo mousedown/mousemove/mouseup, CSS var --sidebar-w, rango 200-580px, handle con indicador visual al hover/drag).
 
 ## Reglas Criticas
 
