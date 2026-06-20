@@ -1,0 +1,163 @@
+{% set action_label = {"reply": "Respondiendo a", "reply_all": "Respondiendo a todos sobre", "forward": "Reenviando"} %}
+<div class="compose-panel" id="compose-panel">
+
+    <!-- Encabezado del panel -->
+    <div class="compose-panel-header">
+        <button class="compose-back-btn"
+                hx-get="/api/emails/{{ email_message_id }}/viewer-panel{% if thread_id %}?thread_id={{ thread_id }}{% endif %}"
+                hx-target="#inbox-email-viewer"
+                hx-swap="innerHTML"
+                title="Volver al correo">
+            ← Volver
+        </button>
+        <span class="compose-panel-title">
+            {{ action_label.get(action, "Redactar") }}: <em>{{ orig_subject | e }}</em>
+        </span>
+    </div>
+
+    <!-- Formulario principal -->
+    <form id="compose-form"
+          class="compose-form"
+          hx-post="/api/emails/compose/send"
+          hx-target="#compose-result"
+          hx-swap="innerHTML"
+          hx-encoding="multipart/form-data"
+          hx-indicator="#compose-spinner">
+
+        <!-- Campos ocultos -->
+        <input type="hidden" name="in_reply_to"      value="{{ msg_id_header | e }}">
+        <input type="hidden" name="thread_id"         value="{{ thread_id or 0 }}">
+        <input type="hidden" name="original_email_id" value="{{ email_message_id }}">
+
+        <!-- De -->
+        <div class="compose-field">
+            <span class="compose-field-label">De</span>
+            <span class="compose-field-value compose-from">{{ from_display | e }}</span>
+        </div>
+
+        <!-- Para -->
+        <div class="compose-field">
+            <label class="compose-field-label" for="compose-to">Para</label>
+            <input id="compose-to"
+                   class="compose-field-input"
+                   type="text"
+                   name="to_field"
+                   value="{{ to_value | e }}"
+                   placeholder="destinatario@ejemplo.com"
+                   autocomplete="email"
+                   required>
+        </div>
+
+        <!-- CC + toggle CCO -->
+        <div class="compose-field">
+            <label class="compose-field-label" for="compose-cc">CC</label>
+            <input id="compose-cc"
+                   class="compose-field-input"
+                   type="text"
+                   name="cc_field"
+                   value="{{ cc_value | e }}"
+                   placeholder="en copia…">
+            <button type="button"
+                    class="compose-toggle-bcc"
+                    onclick="toggleBcc(this)"
+                    title="Mostrar CCO">
+                CCO
+            </button>
+        </div>
+
+        <!-- CCO (oculto por defecto) -->
+        <div class="compose-field" id="compose-bcc-row" style="display:none;">
+            <label class="compose-field-label" for="compose-bcc">CCO</label>
+            <input id="compose-bcc"
+                   class="compose-field-input"
+                   type="text"
+                   name="bcc_field"
+                   placeholder="copia oculta…">
+        </div>
+
+        <!-- Asunto -->
+        <div class="compose-field compose-field--subject">
+            <label class="compose-field-label" for="compose-subject">Asunto</label>
+            <input id="compose-subject"
+                   class="compose-field-input"
+                   type="text"
+                   name="subject_field"
+                   value="{{ subject_value | e }}"
+                   placeholder="Asunto del correo">
+        </div>
+
+        <!-- Separador -->
+        <div class="compose-body-separator"></div>
+
+        <!-- Cuerpo -->
+        <textarea id="compose-body"
+                  class="compose-body"
+                  name="body_field"
+                  placeholder="Escribe tu mensaje aquí…">{{ quoted_body }}</textarea>
+
+        <!-- Adjuntos -->
+        <div class="compose-attachments-row">
+            <label class="compose-attach-label" for="compose-files">
+                <span class="compose-attach-icon">📎</span>
+                Adjuntar archivos
+            </label>
+            <input id="compose-files"
+                   type="file"
+                   name="attachments"
+                   multiple
+                   class="compose-files-input">
+        </div>
+
+        <!-- Barra de acciones + zona de resultado -->
+        <div class="compose-toolbar">
+            <button type="submit" class="primary-button compose-send-btn">
+                ✉ Enviar
+            </button>
+            <button type="button"
+                    class="secondary-button"
+                    hx-get="/api/emails/{{ email_message_id }}/viewer-panel{% if thread_id %}?thread_id={{ thread_id }}{% endif %}"
+                    hx-target="#inbox-email-viewer"
+                    hx-swap="innerHTML">
+                Cancelar
+            </button>
+            <span id="compose-spinner" class="htmx-indicator ai-spinner"> Enviando…</span>
+        </div>
+
+        <!-- Zona de resultado (éxito o error) -->
+        <div id="compose-result"></div>
+    </form>
+</div>
+
+<script>
+(function () {
+    // Toggle CCO
+    window.toggleBcc = function (btn) {
+        var row = document.getElementById('compose-bcc-row');
+        if (!row) return;
+        var hidden = row.style.display === 'none';
+        row.style.display = hidden ? 'flex' : 'none';
+        btn.classList.toggle('is-active', hidden);
+        if (hidden) document.getElementById('compose-bcc').focus();
+    };
+
+    // Previsualización de archivos adjuntos seleccionados
+    var input = document.getElementById('compose-files');
+    if (input) {
+        input.addEventListener('change', function () {
+            var existing = document.getElementById('compose-file-list');
+            if (existing) existing.remove();
+            if (!this.files.length) return;
+            var list = document.createElement('ul');
+            list.id = 'compose-file-list';
+            list.className = 'compose-file-list';
+            Array.from(this.files).forEach(function (f) {
+                var li = document.createElement('li');
+                var kb = (f.size / 1024).toFixed(1);
+                li.textContent = f.name + ' (' + kb + ' KB)';
+                list.appendChild(li);
+            });
+            input.parentElement.insertAdjacentElement('afterend', list);
+        });
+    }
+})();
+</script>

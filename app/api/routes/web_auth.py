@@ -1,9 +1,9 @@
 import json
 import mimetypes
 import os
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -2184,46 +2184,10 @@ def email_viewer_panel(
     else:
         body_section = '<p class="pane-empty-text">Este correo no tiene cuerpo de texto.</p>'
 
-    import urllib.parse as _urlparse
     import html as html_lib2
 
     subject_safe = (row["subject"] or "(Sin asunto)").replace("<", "&lt;").replace(">", "&gt;")
     from_safe = (f'{row["from_name"]} &lt;{row["from_email"]}&gt;' if row["from_name"] else (row["from_email"] or "?")).replace("<", "&lt;").replace(">", "&gt;")
-
-    # Destinatarios y Message-ID para construir los mailto:
-    detail_row = db.execute(
-        text("""
-            SELECT em.message_id_header,
-                   string_agg(DISTINCT er.email, ', ') FILTER (WHERE er.recipient_type = 'to') AS to_emails,
-                   string_agg(DISTINCT er.email, ', ') FILTER (WHERE er.recipient_type = 'cc') AS cc_emails
-            FROM gestor_tickets.email_messages em
-            LEFT JOIN gestor_tickets.email_recipients er ON er.email_message_id = em.id
-            WHERE em.id = :id
-            GROUP BY em.message_id_header
-        """),
-        {"id": email_message_id},
-    ).mappings().first()
-
-    msg_id_header = (detail_row["message_id_header"] or "") if detail_row else ""
-    to_emails = (detail_row["to_emails"] or "") if detail_row else ""
-    cc_emails_str = (detail_row["cc_emails"] or "") if detail_row else ""
-    from_email_val = row["from_email"] or ""
-    subject_val = row["subject"] or ""
-
-    reply_to = _urlparse.quote(from_email_val)
-    re_subject = _urlparse.quote(f"Re: {subject_val}")
-    fwd_subject = _urlparse.quote(f"Fwd: {subject_val}")
-    in_reply_to_param = f"&In-Reply-To={_urlparse.quote(msg_id_header)}" if msg_id_header else ""
-
-    reply_href = f"mailto:{reply_to}?subject={re_subject}{in_reply_to_param}"
-
-    # Reply All: de vuelta al remitente + todos los To/CC originales excepto la propia cuenta
-    all_cc = ", ".join(filter(None, [to_emails, cc_emails_str]))
-    reply_all_href = f"mailto:{reply_to}?subject={re_subject}{in_reply_to_param}"
-    if all_cc:
-        reply_all_href += f"&cc={_urlparse.quote(all_cc)}"
-
-    forward_href = f"mailto:?subject={fwd_subject}"
 
     assistant_mode = bool(user.get("assistant_mode", True))
     ignore_confirm = (
@@ -2261,14 +2225,15 @@ def email_viewer_panel(
                     f'</form>'
                 )
 
+        compose_base = f"/api/emails/{email_message_id}/compose?thread_id={thread_id}"
         action_menu_html = (
             f'<div class="inbox-email-action-menu" x-data="{{ open: false }}" @click.outside="open = false">'
             f'<button class="inbox-email-menu-btn" @click="open = !open" title="Acciones del correo">⋮</button>'
             f'<div class="inbox-email-menu-dropdown" x-show="open" x-cloak>'
-            # — Responder / Reenviar —
-            f'<a class="inbox-email-menu-item" href="{reply_href}" target="_blank">Responder</a>'
-            f'<a class="inbox-email-menu-item" href="{reply_all_href}" target="_blank">Responder a todos</a>'
-            f'<a class="inbox-email-menu-item" href="{forward_href}" target="_blank">Reenviar</a>'
+            # — Responder / Reenviar (abren el panel de redacción integrado) —
+            f'<button class="inbox-email-menu-item" hx-get="{compose_base}&action=reply" hx-target="#inbox-email-viewer" hx-swap="innerHTML">Responder</button>'
+            f'<button class="inbox-email-menu-item" hx-get="{compose_base}&action=reply_all" hx-target="#inbox-email-viewer" hx-swap="innerHTML">Responder a todos</button>'
+            f'<button class="inbox-email-menu-item" hx-get="{compose_base}&action=forward" hx-target="#inbox-email-viewer" hx-swap="innerHTML">Reenviar</button>'
             f'<hr class="inbox-email-menu-divider">'
             # — Organizar —
             f'<form method="post" action="/threads/{thread_id}/fork-email/{email_message_id}">'
@@ -2304,6 +2269,267 @@ def email_viewer_panel(
 </div>
 """
     return HTMLResponse(html_out)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Panel de redacción de correo (Responder / Responder a todos / Reenviar)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@router.get("/api/emails/{email_message_id}/compose", response_class=HTMLResponse)
+def compose_email_panel(
+    request: Request,
+    email_message_id: int,
+    action: str = "reply",
+    thread_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Partial HTMX: devuelve el panel de redacción pre-rellenado para
+    responder, responder-a-todos o reenviar un correo archivado.
+    """
+    import email as email_lib
+    from email.policy import default as email_default
+    from pathlib import Path
+    import html as _html
+
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return HTMLResponse('<p class="pane-empty-text">Sesión no válida.</p>', status_code=403)
+
+    row = db.execute(
+        text("""
+            SELECT em.id, em.subject, em.from_name, em.from_email,
+                   em.sent_at, em.eml_storage_path,
+                   em.body_text_preview, em.message_id_header
+            FROM gestor_tickets.email_messages em
+            WHERE em.id = :id AND em.account_id = :account_id
+            LIMIT 1
+        """),
+        {"id": email_message_id, "account_id": int(user["account_id"])},
+    ).mappings().first()
+
+    if not row:
+        return HTMLResponse('<p class="pane-empty-text">Correo no encontrado.</p>', status_code=404)
+
+    # Cuenta colaborativa (From: de los correos salientes)
+    account_row = db.execute(
+        text("""
+            SELECT email, display_name
+            FROM gestor_tickets.collaborative_accounts
+            WHERE id = :id LIMIT 1
+        """),
+        {"id": int(user["account_id"])},
+    ).mappings().first()
+
+    account_email = (account_row["email"] or "") if account_row else ""
+    account_display = (account_row["display_name"] or "") if account_row else ""
+
+    # Destinatarios originales
+    detail_row = db.execute(
+        text("""
+            SELECT string_agg(DISTINCT er.email, ', ') FILTER (WHERE er.recipient_type = 'to') AS to_emails,
+                   string_agg(DISTINCT er.email, ', ') FILTER (WHERE er.recipient_type = 'cc') AS cc_emails
+            FROM gestor_tickets.email_recipients er
+            WHERE er.email_message_id = :id
+        """),
+        {"id": email_message_id},
+    ).mappings().first()
+
+    orig_to = (detail_row["to_emails"] or "") if detail_row else ""
+    orig_cc = (detail_row["cc_emails"] or "") if detail_row else ""
+    orig_from = row["from_email"] or ""
+    orig_subject = row["subject"] or ""
+    msg_id_header = row["message_id_header"] or ""
+
+    # Pre-rellenar campos según la acción
+    if action == "reply":
+        to_value = orig_from
+        cc_value = ""
+        prefix = "Re: "
+        subject_value = orig_subject if orig_subject.lower().startswith("re:") else prefix + orig_subject
+    elif action == "reply_all":
+        to_value = orig_from
+        others = [
+            e.strip() for e in f"{orig_to}, {orig_cc}".split(",")
+            if e.strip() and e.strip().lower() != account_email.lower()
+        ]
+        cc_value = ", ".join(others)
+        prefix = "Re: "
+        subject_value = orig_subject if orig_subject.lower().startswith("re:") else prefix + orig_subject
+    else:  # forward
+        to_value = ""
+        cc_value = ""
+        prefix = "Fwd: "
+        subject_value = orig_subject if orig_subject.lower().startswith("fwd:") else prefix + orig_subject
+
+    # Extraer texto plano del .eml para la cita
+    body_text_quote = ""
+    try:
+        eml_path = row["eml_storage_path"]
+        if eml_path:
+            raw = Path(eml_path).read_bytes()
+            parsed = email_lib.message_from_bytes(raw, policy=email_default)
+            for part in parsed.walk():
+                if (
+                    part.get_content_type() == "text/plain"
+                    and part.get_content_disposition() != "attachment"
+                ):
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        charset = part.get_content_charset() or "utf-8"
+                        try:
+                            body_text_quote = payload.decode(charset, errors="replace").strip()
+                        except Exception:
+                            body_text_quote = payload.decode("latin-1", errors="replace").strip()
+                        break
+    except Exception:
+        pass
+
+    if not body_text_quote:
+        body_text_quote = row["body_text_preview"] or ""
+
+    sent_at_str = str(row["sent_at"])[:16] if row["sent_at"] else ""
+    from_str = f"{row['from_name']} <{orig_from}>" if row["from_name"] else orig_from
+
+    if action in ("reply", "reply_all"):
+        quote_header = f"El {sent_at_str}, {from_str} escribió:"
+    else:
+        lines = [
+            "---------- Mensaje reenviado ----------",
+            f"De: {from_str}",
+            f"Fecha: {sent_at_str}",
+            f"Asunto: {orig_subject}",
+        ]
+        quote_header = "\n".join(lines)
+
+    if body_text_quote:
+        quoted_lines = "\n".join(f"> {line}" for line in body_text_quote.splitlines())
+        quoted_body = f"\n\n{quote_header}\n\n{quoted_lines}"
+    else:
+        quoted_body = f"\n\n{quote_header}"
+
+    from_display = f"{account_display} <{account_email}>" if account_display else account_email
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/email_compose.html",
+        context=_template_context(
+            request,
+            action=action,
+            email_message_id=email_message_id,
+            thread_id=thread_id,
+            from_display=from_display,
+            to_value=to_value,
+            cc_value=cc_value,
+            subject_value=subject_value,
+            quoted_body=quoted_body,
+            msg_id_header=msg_id_header,
+            orig_subject=orig_subject,
+        ),
+    )
+
+
+@router.post("/api/emails/compose/send", response_class=HTMLResponse)
+async def send_composed_email(
+    request: Request,
+    to_field: str = Form(""),
+    cc_field: str = Form(""),
+    bcc_field: str = Form(""),
+    subject_field: str = Form(""),
+    body_field: str = Form(""),
+    in_reply_to: str = Form(""),
+    thread_id: int = Form(0),
+    original_email_id: int = Form(0),
+    attachments: List[UploadFile] = File(default=[]),
+    db: Session = Depends(get_db),
+):
+    """Recibe el formulario de redacción y envía el correo vía SMTP."""
+    from app.services.smtp_service import send_email as smtp_send
+    from app.core.security import decrypt_text
+    from sqlalchemy import select as sa_select
+
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return HTMLResponse('<p class="compose-send-error">Sesión no válida.</p>', status_code=403)
+
+    account_id = int(user["account_id"])
+    from app.models import CollaborativeAccount
+    account = db.execute(
+        sa_select(CollaborativeAccount).where(CollaborativeAccount.id == account_id)
+    ).scalar_one_or_none()
+
+    if not account:
+        return HTMLResponse('<p class="compose-send-error">Cuenta no encontrada.</p>', status_code=404)
+
+    if not account.imap_password_ciphertext:
+        return HTMLResponse(
+            '<p class="compose-send-error">La cuenta no tiene credenciales configuradas.</p>',
+            status_code=400,
+        )
+
+    plain_password = decrypt_text(account.imap_password_ciphertext)
+
+    def _split(raw: str) -> list[str]:
+        return [a.strip() for a in raw.split(",") if a.strip()]
+
+    to_list = _split(to_field)
+    cc_list = _split(cc_field)
+    bcc_list = _split(bcc_field)
+
+    if not to_list and not bcc_list:
+        return HTMLResponse(
+            '<p class="compose-send-error">Debes especificar al menos un destinatario en Para o CCO.</p>',
+            status_code=400,
+        )
+
+    # Leer archivos adjuntos
+    attach_data: list[tuple[str, str, bytes]] = []
+    for upload in (attachments or []):
+        if upload.filename:
+            data = await upload.read()
+            if data:
+                ct = upload.content_type or "application/octet-stream"
+                attach_data.append((upload.filename, ct, data))
+
+    try:
+        smtp_send(
+            account=account,
+            plain_password=plain_password,
+            to=to_list,
+            cc=cc_list or None,
+            bcc=bcc_list or None,
+            subject=subject_field,
+            body_text=body_field,
+            in_reply_to=in_reply_to or None,
+            attachments=attach_data or None,
+        )
+    except ValueError as exc:
+        import html as _html
+        msg = _html.escape(str(exc))
+        return HTMLResponse(
+            f'<p class="compose-send-error">Error al enviar: {msg}</p>',
+            status_code=500,
+        )
+
+    back_url = ""
+    if original_email_id:
+        back_url = f"/api/emails/{original_email_id}/viewer-panel"
+        if thread_id:
+            back_url += f"?thread_id={thread_id}"
+
+    back_btn = (
+        f'<button class="secondary-button" style="margin-top:10px;" '
+        f'hx-get="{back_url}" hx-target="#inbox-email-viewer" hx-swap="innerHTML">'
+        f'Volver al correo</button>'
+        if back_url else ""
+    )
+
+    return HTMLResponse(
+        f'<div class="compose-send-success">'
+        f'<p>Correo enviado correctamente.</p>'
+        f'{back_btn}'
+        f'</div>'
+    )
 
 
 @router.get("/api/emails/{email_message_id}/cid/{content_id:path}")
