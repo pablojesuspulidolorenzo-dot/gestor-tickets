@@ -2184,13 +2184,60 @@ def email_viewer_panel(
     else:
         body_section = '<p class="pane-empty-text">Este correo no tiene cuerpo de texto.</p>'
 
+    import urllib.parse as _urlparse
+    import html as html_lib2
+
     subject_safe = (row["subject"] or "(Sin asunto)").replace("<", "&lt;").replace(">", "&gt;")
     from_safe = (f'{row["from_name"]} &lt;{row["from_email"]}&gt;' if row["from_name"] else (row["from_email"] or "?")).replace("<", "&lt;").replace(">", "&gt;")
+
+    # Destinatarios y Message-ID para construir los mailto:
+    detail_row = db.execute(
+        text("""
+            SELECT em.message_id_header,
+                   string_agg(DISTINCT er.email, ', ') FILTER (WHERE er.recipient_type = 'to') AS to_emails,
+                   string_agg(DISTINCT er.email, ', ') FILTER (WHERE er.recipient_type = 'cc') AS cc_emails
+            FROM gestor_tickets.email_messages em
+            LEFT JOIN gestor_tickets.email_recipients er ON er.email_message_id = em.id
+            WHERE em.id = :id
+            GROUP BY em.message_id_header
+        """),
+        {"id": email_message_id},
+    ).mappings().first()
+
+    msg_id_header = (detail_row["message_id_header"] or "") if detail_row else ""
+    to_emails = (detail_row["to_emails"] or "") if detail_row else ""
+    cc_emails_str = (detail_row["cc_emails"] or "") if detail_row else ""
+    from_email_val = row["from_email"] or ""
+    subject_val = row["subject"] or ""
+
+    reply_to = _urlparse.quote(from_email_val)
+    re_subject = _urlparse.quote(f"Re: {subject_val}")
+    fwd_subject = _urlparse.quote(f"Fwd: {subject_val}")
+    in_reply_to_param = f"&In-Reply-To={_urlparse.quote(msg_id_header)}" if msg_id_header else ""
+
+    reply_href = f"mailto:{reply_to}?subject={re_subject}{in_reply_to_param}"
+
+    # Reply All: de vuelta al remitente + todos los To/CC originales excepto la propia cuenta
+    all_cc = ", ".join(filter(None, [to_emails, cc_emails_str]))
+    reply_all_href = f"mailto:{reply_to}?subject={re_subject}{in_reply_to_param}"
+    if all_cc:
+        reply_all_href += f"&cc={_urlparse.quote(all_cc)}"
+
+    forward_href = f"mailto:?subject={fwd_subject}"
+
+    assistant_mode = bool(user.get("assistant_mode", True))
+    ignore_confirm = (
+        "onclick=\"return confirm('¿Ignorar este correo? Quedará oculto en este hilo.')\" "
+        if assistant_mode else ""
+    )
+    remove_confirm = (
+        "onclick=\"return confirm('¿Eliminar este correo del hilo? Esta acción no se puede deshacer.')\" "
+        if assistant_mode else ""
+    )
 
     # Menú ⋮ de acciones — solo si se conoce el hilo de contexto
     action_menu_html = ""
     if thread_id:
-        import html as html_lib2
         threads_rows = db.execute(
             text("""
                 SELECT id, title FROM gestor_tickets.system_threads
@@ -2214,16 +2261,29 @@ def email_viewer_panel(
                     f'</form>'
                 )
 
-        fork_confirm = ""
         action_menu_html = (
             f'<div class="inbox-email-action-menu" x-data="{{ open: false }}" @click.outside="open = false">'
             f'<button class="inbox-email-menu-btn" @click="open = !open" title="Acciones del correo">⋮</button>'
             f'<div class="inbox-email-menu-dropdown" x-show="open" x-cloak>'
+            # — Responder / Reenviar —
+            f'<a class="inbox-email-menu-item" href="{reply_href}" target="_blank">Responder</a>'
+            f'<a class="inbox-email-menu-item" href="{reply_all_href}" target="_blank">Responder a todos</a>'
+            f'<a class="inbox-email-menu-item" href="{forward_href}" target="_blank">Reenviar</a>'
+            f'<hr class="inbox-email-menu-divider">'
+            # — Organizar —
             f'<form method="post" action="/threads/{thread_id}/fork-email/{email_message_id}">'
             f'<button class="inbox-email-menu-item" type="submit">Bifurcar en nuevo hilo</button>'
             f'</form>'
             f'{"<hr class=inbox-email-menu-divider>" if copy_items else ""}'
             f'{copy_items}'
+            f'<hr class="inbox-email-menu-divider">'
+            # — Acciones destructivas —
+            f'<form method="post" action="/threads/{thread_id}/ignore-email/{email_message_id}">'
+            f'<button class="inbox-email-menu-item" type="submit" {ignore_confirm}>Ignorar en este hilo</button>'
+            f'</form>'
+            f'<form method="post" action="/threads/{thread_id}/remove-email/{email_message_id}">'
+            f'<button class="inbox-email-menu-item inbox-email-menu-item--danger" type="submit" {remove_confirm}>Eliminar del hilo</button>'
+            f'</form>'
             f'</div>'
             f'</div>'
         )
@@ -2333,6 +2393,70 @@ def copy_email(
         return RedirectResponse(url=f"/threads/{target_thread_id}?message=copied", status_code=303)
     except ValueError as exc:
         return RedirectResponse(url=f"/threads/{thread_id}?error={exc}", status_code=303)
+
+
+@router.post("/threads/{thread_id}/ignore-email/{email_message_id}", response_class=HTMLResponse)
+def ignore_email_in_thread(
+    request: Request,
+    thread_id: int,
+    email_message_id: int,
+    db: Session = Depends(get_db),
+):
+    """Oculta el correo en el hilo actual sin eliminarlo del sistema."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    db.execute(
+        text("""
+            UPDATE gestor_tickets.email_thread_members
+            SET status = 'removed',
+                removed_by_user_id = :user_id,
+                removed_reason = 'Ignorado en el hilo por el usuario',
+                removed_at = now()
+            WHERE thread_id = :thread_id
+              AND email_message_id = :email_id
+              AND status = 'active'
+        """),
+        {
+            "thread_id": thread_id,
+            "email_id": email_message_id,
+            "user_id": int(user["user_id"]),
+        },
+    )
+    db.commit()
+    return RedirectResponse(url=f"/inbox?thread_id={thread_id}", status_code=303)
+
+
+@router.post("/threads/{thread_id}/remove-email/{email_message_id}", response_class=HTMLResponse)
+def remove_email_from_thread(
+    request: Request,
+    thread_id: int,
+    email_message_id: int,
+    db: Session = Depends(get_db),
+):
+    """Elimina el correo del hilo (status removed). El mensaje permanece en el sistema."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    db.execute(
+        text("""
+            UPDATE gestor_tickets.email_thread_members
+            SET status = 'removed',
+                removed_by_user_id = :user_id,
+                removed_reason = 'Eliminado del hilo por el usuario',
+                removed_at = now()
+            WHERE thread_id = :thread_id
+              AND email_message_id = :email_id
+              AND status = 'active'
+        """),
+        {
+            "thread_id": thread_id,
+            "email_id": email_message_id,
+            "user_id": int(user["user_id"]),
+        },
+    )
+    db.commit()
+    return RedirectResponse(url=f"/inbox?thread_id={thread_id}", status_code=303)
 
 
 @router.post("/threads/{thread_id}/merge-into/{target_thread_id}", response_class=HTMLResponse)

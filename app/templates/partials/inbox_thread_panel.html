@@ -24,7 +24,7 @@
             Síntesis IA
         </button>
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'emails' }"
-                @click="view = 'emails'; selectedEmailId = selectedEmailId || {{ messages[0].email_message_id if messages else 'null' }}">
+                @click="view = 'emails'; selectedEmailId = selectedEmailId || {{ (messages | last).email_message_id if messages else 'null' }}">
             Correos reales
             {% if messages %}<span class="inbox-tab-count">{{ messages|length }}</span>{% endif %}
         </button>
@@ -164,8 +164,8 @@
 
         <div id="inbox-email-viewer" class="inbox-email-viewer-inner">
             {% if messages %}
-            <!-- Precarga el primer correo; el botón ⋮ lo genera el backend con thread_id -->
-            <div hx-get="/api/emails/{{ messages[0].email_message_id }}/viewer-panel?thread_id={{ thread.id }}"
+            <!-- Precarga el correo más reciente (el primero en la sidebar) -->
+            <div hx-get="/api/emails/{{ (messages | last).email_message_id }}/viewer-panel?thread_id={{ thread.id }}"
                  hx-trigger="load"
                  hx-target="#inbox-email-viewer"
                  hx-swap="innerHTML">
