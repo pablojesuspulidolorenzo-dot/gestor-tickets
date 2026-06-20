@@ -27,7 +27,7 @@
 
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'timeline' }" @click="view = 'timeline'">
             Cronología
-            {% if messages %}<span class="inbox-tab-count">{{ messages|length }}</span>{% endif %}
+            <span id="thread-timeline-count-badge" class="inbox-tab-count"{% if not messages %} style="display:none"{% endif %}>{{ messages|length if messages else 0 }}</span>
         </button>
 
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'glpi' }" @click="view = 'glpi'">
@@ -38,7 +38,7 @@
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'emails' }"
                 @click="view = 'emails'; selectedEmailId = selectedEmailId || {{ (messages | last).email_message_id if messages else 'null' }}">
             Correos reales
-            {% if messages %}<span class="inbox-tab-count">{{ messages|length }}</span>{% endif %}
+            <span id="thread-email-count-badge" class="inbox-tab-count"{% if not messages %} style="display:none"{% endif %}>{{ messages|length if messages else 0 }}</span>
         </button>
 
     </div>
@@ -102,10 +102,21 @@
                 <div class="scheduled-alert scheduled-alert-error">
                     Error IA: {{ ai_thread_result.error_message }}
                 </div>
+                <input type="hidden" id="ai-synth-ts-val" value="">
                 {% else %}
                 <p class="pane-empty-text">Sin síntesis IA todavía. Pulsa "Sintetizar" para generarla.</p>
+                <input type="hidden" id="ai-synth-ts-val" value="">
                 {% endif %}
             </div>
+
+            {# Control de estado para polling en vivo — nunca visible #}
+            <input type="hidden" id="thread-email-count-val" value="{{ messages|length if messages else 0 }}">
+            <div id="thread-live-poller"
+                 hx-get="/threads/{{ thread.id }}/live-updates"
+                 hx-trigger="every 60s"
+                 hx-swap="none"
+                 hx-vals='js:{"synth_ts": document.getElementById("ai-synth-ts-val")?.value ?? "", "email_count": parseInt(document.getElementById("thread-email-count-val")?.value ?? "0", 10)}'
+                 style="display:none;"></div>
         </section>
 
     </div><!-- /vista síntesis -->

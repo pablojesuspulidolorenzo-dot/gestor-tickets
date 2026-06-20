@@ -832,6 +832,69 @@ def thread_synthesize_ai(
     )
 
 
+@router.get("/threads/{thread_id}/live-updates")
+def thread_live_updates(
+    request: Request,
+    thread_id: int,
+    synth_ts: str = "",
+    email_count: int = 0,
+    db: Session = Depends(get_db),
+):
+    """
+    Polling endpoint de bajo impacto para el panel de hilo.
+
+    Retorna 204 (sin cuerpo) si nada ha cambiado → HTMX no toca el DOM.
+    Retorna HTML con OOB swaps solo para los fragmentos que sí cambiaron:
+    - Síntesis IA: si synthesized_at es más reciente que el que el cliente tiene.
+    - Count de correos: si el total en BD difiere del que el cliente tiene.
+    """
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+
+    oob_parts: list[str] = []
+
+    # ── Comprobar síntesis IA ────────────────────────────────────────────────
+    current_synth = get_thread_ai_synthesis(db, thread_id)
+    db_synth_ts = str(current_synth.get("synthesized_at") or "") if current_synth else ""
+    if (
+        current_synth
+        and current_synth.get("status") == "processed"
+        and db_synth_ts
+        and db_synth_ts != synth_ts
+    ):
+        synth_context = _template_context(request, ok=True, result=current_synth)
+        synth_html = templates.get_template("partials/ai_thread_result.html").render(synth_context)
+        oob_parts.append(
+            f'<div hx-swap-oob="innerHTML:#inbox-ai-result">{synth_html}</div>'
+        )
+
+    # ── Comprobar count de correos ───────────────────────────────────────────
+    db_email_count = int(
+        db.execute(
+            text("SELECT COUNT(*) FROM gestor_tickets.email_messages WHERE thread_id = :tid"),
+            {"tid": thread_id},
+        ).scalar_one()
+        or 0
+    )
+    if db_email_count != email_count:
+        badge_style = "" if db_email_count > 0 else ' style="display:none"'
+        oob_parts.append(
+            f'<span id="thread-email-count-badge" class="inbox-tab-count"{badge_style}'
+            f' hx-swap-oob="outerHTML:#thread-email-count-badge">{db_email_count}</span>'
+            f'<span id="thread-timeline-count-badge" class="inbox-tab-count"{badge_style}'
+            f' hx-swap-oob="outerHTML:#thread-timeline-count-badge">{db_email_count}</span>'
+            f'<input type="hidden" id="thread-email-count-val" value="{db_email_count}"'
+            f' hx-swap-oob="outerHTML:#thread-email-count-val">'
+        )
+
+    if not oob_parts:
+        return Response(status_code=204)
+
+    return HTMLResponse("".join(oob_parts))
+
+
 @router.post("/threads/{thread_id}/reprocess-ai", response_class=HTMLResponse)
 def thread_reprocess_ai(
     request: Request,
