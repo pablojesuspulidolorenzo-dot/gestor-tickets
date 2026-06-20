@@ -17,13 +17,15 @@
 </div>
 
 <!-- Toggle síntesis IA / correos reales -->
-<div class="inbox-view-toggle" x-data="{ view: 'synthesis' }">
+<div class="inbox-view-toggle" x-data="{ view: 'synthesis', selectedEmailId: null }">
     <div class="inbox-view-tabs">
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'synthesis' }" @click="view = 'synthesis'">
             Síntesis IA
         </button>
-        <button class="inbox-view-tab" :class="{ 'is-active': view === 'emails' }" @click="view = 'emails'">
+        <button class="inbox-view-tab" :class="{ 'is-active': view === 'emails' }"
+                @click="view = 'emails'; if (!selectedEmailId && {{ messages[0].email_message_id if messages else 'null' }}) { selectedEmailId = {{ messages[0].email_message_id if messages else 'null' }} }">
             Correos reales
+            {% if messages %}<span class="inbox-tab-count">{{ messages|length }}</span>{% endif %}
         </button>
     </div>
 
@@ -102,85 +104,116 @@
         {% endif %}
     </div>
 
-    <!-- Vista correos reales -->
-    <div x-show="view === 'emails'" style="display:none;" class="inbox-emails-view">
-        {% if messages %}
-        {% for msg in messages %}
-        <div class="inbox-email-item">
-            <div class="inbox-email-header">
-                <div>
-                    <strong>{{ msg.subject or "(Sin asunto)" }}</strong>
+    <!-- Vista correos reales: layout de dos sub-columnas -->
+    <div x-show="view === 'emails'" style="display:none;" class="inbox-emails-view inbox-emails-split">
+
+        <!-- Sub-columna izquierda: listado compacto -->
+        <div class="inbox-email-list-col">
+            {% if messages %}
+            {% for msg in messages %}
+            {% set mid = msg.email_message_id %}
+            <div class="inbox-email-card"
+                 :class="{ 'is-selected': selectedEmailId === {{ mid }} }"
+                 @click="selectedEmailId = {{ mid }}"
+                 hx-get="/api/emails/{{ mid }}/viewer-panel"
+                 hx-target="#inbox-email-viewer"
+                 hx-swap="innerHTML"
+                 hx-trigger="click">
+                <div class="inbox-card-top">
                     <span class="inbox-dir-badge {{ 'is-in' if msg.direction == 'inbound' else 'is-out' }}">
-                        {{ "Recibido" if msg.direction == "inbound" else "Enviado" }}
+                        {{ "↓" if msg.direction == "inbound" else "↑" }}
                     </span>
+                    <span class="inbox-card-from">{{ (msg.from_name or msg.from_email or "?")[:28] }}</span>
+                    <span class="inbox-card-date">{{ (msg.sent_at | string)[5:16] if msg.sent_at else "—" }}</span>
                 </div>
-                <div class="timeline-meta">
-                    {{ (msg.sent_at | string)[:16] if msg.sent_at else "Sin fecha" }}
-                </div>
+                <div class="inbox-card-subject">{{ (msg.subject or "(Sin asunto)")[:60] }}</div>
+                {% if msg.body_text_preview %}
+                <div class="inbox-card-preview">{{ msg.body_text_preview[:80] }}</div>
+                {% endif %}
             </div>
-            <div class="inbox-email-from">De: {{ msg.from_name or msg.from_email or "?" }}</div>
-            {% if msg.body_text_preview %}
-            <pre class="inbox-email-preview">{{ msg.body_text_preview[:600] }}{% if msg.body_text_preview|length > 600 %}…{% endif %}</pre>
+            {% endfor %}
+
+            <!-- Fusión de hilos al pie de la lista -->
+            {% if all_threads and all_threads|length > 1 %}
+            <details class="inbox-merge-details">
+                <summary>Fusionar hilo…</summary>
+                <form method="post" class="inbox-merge-form">
+                    <select name="target" class="form-input"
+                            onchange="this.form.action='/threads/{{ thread.id }}/merge-into/' + this.value">
+                        <option value="">— Hilo destino —</option>
+                        {% for t in all_threads if t.id != thread.id %}
+                        <option value="{{ t.id }}">Hilo #{{ t.id }}: {{ (t.title or "(Sin título)")[:35] }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="primary-button" type="submit" style="width:100%; margin-top:6px; font-size:.8rem;"
+                        {% if assistant_mode %}
+                        onclick="return confirm('Esta acción fusionará los correos en el hilo destino y marcará este como fusionado. ¿Continuar?')"
+                        {% endif %}>
+                        Fusionar
+                    </button>
+                </form>
+            </details>
             {% endif %}
 
-            <!-- Etiquetas IA del correo -->
-            {% set email_ai = namespace(result=None) %}
-            <div class="inbox-email-ai-tags" hx-get="/api/emails/{{ msg.email_message_id }}/ai-tags"
-                 hx-trigger="load" hx-swap="innerHTML">
+            {% else %}
+            <p class="pane-empty-text" style="padding:18px;">Este hilo no tiene correos archivados.</p>
+            {% endif %}
+        </div>
+
+        <!-- Sub-columna derecha: visor de alta fidelidad -->
+        <div class="inbox-email-viewer-col">
+            <div id="inbox-email-viewer" class="inbox-email-viewer-inner">
+                {% if messages %}
+                <!-- Carga el primer correo automáticamente -->
+                <div hx-get="/api/emails/{{ messages[0].email_message_id }}/viewer-panel"
+                     hx-trigger="load"
+                     hx-target="#inbox-email-viewer"
+                     hx-swap="innerHTML">
+                    <div class="inbox-viewer-placeholder">
+                        <span class="inbox-viewer-placeholder-icon">✉</span>
+                        <p>Cargando correo…</p>
+                    </div>
+                </div>
+                {% else %}
+                <div class="inbox-viewer-placeholder">
+                    <span class="inbox-viewer-placeholder-icon">✉</span>
+                    <p>Selecciona un correo de la lista.</p>
+                </div>
+                {% endif %}
             </div>
 
-            <!-- Operaciones M:N -->
-            {% if all_threads %}
-            <details class="inbox-email-ops">
-                <summary>Operaciones de hilo</summary>
-                <div class="inbox-ops-grid">
-                    <form method="post" action="/threads/{{ thread.id }}/fork-email/{{ msg.email_message_id }}">
-                        <button class="secondary-button" type="submit" style="font-size:.8rem;"
-                            {% if assistant_mode %}
-                            onclick="return confirm('Bifurcar este correo creará un hilo nuevo y lo eliminará del hilo actual. ¿Continuar?')"
-                            {% endif %}>
-                            Bifurcar a nuevo hilo
-                        </button>
-                    </form>
-                    <form method="post" action="/threads/{{ thread.id }}/copy-email/{{ msg.email_message_id }}">
-                        <select name="target_thread_id" class="form-input" style="font-size:.8rem;">
-                            {% for t in all_threads if t.id != thread.id %}
-                            <option value="{{ t.id }}">Hilo #{{ t.id }}: {{ t.title[:40] if t.title else "(Sin título)" }}</option>
-                            {% endfor %}
-                        </select>
-                        <button class="secondary-button" type="submit" style="font-size:.8rem;">Copiar a hilo</button>
-                    </form>
+            <!-- Operaciones M:N del correo seleccionado -->
+            {% if all_threads and messages %}
+            <details class="inbox-email-ops" style="border-top:1px solid var(--border); padding:10px 14px;">
+                <summary style="cursor:pointer; font-size:.8rem; color:var(--text-muted); font-weight:600;">Operaciones de hilo del correo seleccionado</summary>
+                <div class="inbox-ops-grid" style="margin-top:10px;">
+                    {% for msg in messages %}
+                    <template x-if="selectedEmailId === {{ msg.email_message_id }}">
+                        <div>
+                            <form method="post" action="/threads/{{ thread.id }}/fork-email/{{ msg.email_message_id }}" style="display:inline;">
+                                <button class="secondary-button" type="submit" style="font-size:.78rem;"
+                                    {% if assistant_mode %}onclick="return confirm('Bifurcar creará un hilo nuevo con solo este correo. ¿Continuar?')"{% endif %}>
+                                    Bifurcar
+                                </button>
+                            </form>
+                            {% if all_threads|length > 1 %}
+                            <form method="post" action="/threads/{{ thread.id }}/copy-email/{{ msg.email_message_id }}" style="display:inline; margin-left:6px;">
+                                <select name="target_thread_id" class="form-input" style="font-size:.78rem; display:inline; width:auto;">
+                                    {% for t in all_threads if t.id != thread.id %}
+                                    <option value="{{ t.id }}">Hilo #{{ t.id }}: {{ (t.title or "(Sin título)")[:30] }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button class="secondary-button" type="submit" style="font-size:.78rem;">Copiar a hilo</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </template>
+                    {% endfor %}
                 </div>
             </details>
             {% endif %}
         </div>
-        {% endfor %}
-        {% else %}
-        <p class="pane-empty-text">Este hilo no tiene correos archivados.</p>
-        {% endif %}
 
-        <!-- Fusión de hilos -->
-        {% if all_threads and all_threads|length > 1 %}
-        <section class="inbox-panel-section">
-            <h3 class="inbox-section-title">Fusionar este hilo</h3>
-            <p class="pane-empty-text">Todos los correos de este hilo se incorporarán al hilo destino y este quedará marcado como fusionado.</p>
-            <form method="post" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                <select name="target" class="form-input" style="flex:1;"
-                        onchange="this.form.action='/threads/{{ thread.id }}/merge-into/' + this.value">
-                    <option value="">— Seleccionar hilo destino —</option>
-                    {% for t in all_threads if t.id != thread.id %}
-                    <option value="{{ t.id }}">Hilo #{{ t.id }}: {{ t.title[:50] if t.title else "(Sin título)" }}</option>
-                    {% endfor %}
-                </select>
-                <button class="primary-button" type="submit" style="font-size:.85rem;"
-                    {% if assistant_mode %}
-                    onclick="return confirm('Esta acción fusionará los correos en el hilo destino y marcará este como fusionado. Es reversible solo manualmente. ¿Continuar?')"
-                    {% endif %}>
-                    Fusionar
-                </button>
-            </form>
-        </section>
-        {% endif %}
     </div>
 </div>
 

@@ -758,7 +758,7 @@ a {
 .inbox-load-more { padding: 16px; text-align: center; color: var(--text-muted); font-size: .85rem; }
 .inbox-loading-indicator { display: inline-block; }
 
-.inbox-panel { overflow-y: auto; }
+.inbox-panel { overflow: hidden; display: flex; flex-direction: column; }
 .inbox-panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 22px 14px; border-bottom: 1px solid var(--border); background: #fff; }
 .inbox-panel-title { margin: 0 0 4px; font-size: 1.1rem; font-weight: 800; }
 .inbox-panel-meta { margin: 0; font-size: .82rem; color: var(--text-muted); }
@@ -766,11 +766,12 @@ a {
 .inbox-panel-section { padding: 16px 22px; border-bottom: 1px solid var(--border); }
 .inbox-section-title { margin: 0 0 12px; font-size: .88rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
 
-.inbox-view-toggle { display: flex; flex-direction: column; }
+.inbox-view-toggle { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 .inbox-view-tabs { display: flex; gap: 4px; padding: 10px 22px; border-bottom: 1px solid var(--border); background: #f8fafc; }
 .inbox-view-tab { border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; background: #fff; color: var(--text-secondary); font-weight: 750; font-size: .85rem; cursor: pointer; transition: background .12s, border-color .12s; }
 .inbox-view-tab.is-active, .inbox-view-tab[class~="is-active"] { background: #eff6ff; border-color: #bfdbfe; color: var(--primary-dark); }
-.inbox-synthesis-view, .inbox-emails-view { flex: 1; }
+.inbox-synthesis-view { flex: 1; overflow-y: auto; }
+.inbox-tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 999px; background: var(--primary-dark); color: #fff; font-size: .68rem; font-weight: 800; padding: 0 4px; margin-left: 5px; }
 
 .inbox-attachments-list { display: grid; gap: 6px; }
 .inbox-attachment-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
@@ -779,6 +780,97 @@ a {
 .inbox-att-name { display: block; font-weight: 650; font-size: .875rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inbox-att-meta { font-size: .78rem; color: var(--text-muted); }
 
+/* ── Correos reales: layout de dos sub-columnas ──────────────────── */
+.inbox-emails-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.inbox-emails-split { flex-direction: row !important; overflow: hidden; }
+
+.inbox-email-list-col {
+    width: 32%;
+    min-width: 200px;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.inbox-email-viewer-col {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+}
+
+.inbox-email-viewer-inner {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Tarjetas compactas de la sub-columna izquierda */
+.inbox-email-card {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .12s;
+    user-select: none;
+}
+.inbox-email-card:hover { background: #f0f7ff; }
+.inbox-email-card.is-selected { background: #eff6ff; border-left: 3px solid var(--primary-dark); }
+.inbox-card-top { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+.inbox-card-from { flex: 1; font-weight: 650; font-size: .8rem; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-card-date { font-size: .72rem; color: var(--text-muted); flex-shrink: 0; }
+.inbox-card-subject { font-size: .78rem; color: var(--text-secondary); font-weight: 600; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-card-preview { font-size: .72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Fusión al pie de la lista */
+.inbox-merge-details { padding: 10px 12px; border-top: 1px solid var(--border); margin-top: auto; }
+.inbox-merge-details summary { font-size: .78rem; color: var(--text-muted); cursor: pointer; font-weight: 600; }
+.inbox-merge-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+
+/* Visor de correo en sub-columna derecha */
+.inbox-viewer-meta {
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid var(--border);
+    background: #f8fafc;
+    flex-shrink: 0;
+}
+.inbox-viewer-subject { font-size: 1rem; font-weight: 700; margin-bottom: 5px; color: var(--text-primary); }
+.inbox-viewer-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .82rem; color: var(--text-muted); }
+.inbox-viewer-from { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-viewer-date { flex-shrink: 0; font-size: .78rem; }
+.inbox-viewer-ai-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; align-items: center; }
+.inbox-viewer-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+.inbox-viewer-body > iframe.inbox-email-iframe { flex: 1; border: none; display: block; min-height: 380px; }
+
+.inbox-viewer-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 200px;
+    gap: 10px;
+    color: var(--text-muted);
+}
+.inbox-viewer-placeholder-icon { font-size: 2rem; opacity: .4; }
+
+.blocked-content-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fefce8;
+    border-bottom: 1px solid #fde047;
+    padding: 6px 14px;
+    font-size: .8rem;
+    color: #854d0e;
+    flex-shrink: 0;
+}
+.blocked-icon { font-size: 1rem; }
+
+/* Mantener estilos legacy para la bandeja personal y otros usos */
 .inbox-email-item { padding: 14px 22px; border-bottom: 1px solid var(--border); }
 .inbox-email-header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .inbox-email-from { font-size: .82rem; color: var(--text-muted); margin-bottom: 8px; }
@@ -798,6 +890,8 @@ a {
 @media (max-width: 900px) {
     .inbox-shell { grid-template-columns: 1fr; height: auto; }
     .inbox-sidebar { max-height: 340px; border-right: none; border-bottom: 1px solid var(--border); }
+    .inbox-emails-split { flex-direction: column !important; }
+    .inbox-email-list-col { width: 100%; max-height: 260px; border-right: none; border-bottom: 1px solid var(--border); }
 }
 
 /* ── IMAP Intelligence (Módulo 7) ────────────────────────────────── */

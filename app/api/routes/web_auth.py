@@ -2048,6 +2048,135 @@ def email_ai_tags(
     return HTMLResponse(html)
 
 
+@router.get("/api/emails/{email_message_id}/viewer-panel", response_class=HTMLResponse)
+def email_viewer_panel(
+    request: Request,
+    email_message_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Partial HTMX: devuelve el visor de iframe de un correo archivado para la superbandeja.
+    Lee el .eml del disco, sanitiza y devuelve cabecera + iframe sandbox.
+    """
+    import email as email_lib
+    from email.policy import default as email_default
+    from pathlib import Path
+    from app.services.message_detail_service import sanitize_html_body
+
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return HTMLResponse('<p class="pane-empty-text">Sesión no válida.</p>', status_code=403)
+
+    row = db.execute(
+        text("""
+            SELECT id, subject, from_name, from_email, sent_at, direction,
+                   eml_storage_path, has_attachments, body_text_preview, account_id
+            FROM gestor_tickets.email_messages
+            WHERE id = :id AND account_id = :account_id
+            LIMIT 1
+        """),
+        {"id": email_message_id, "account_id": int(user["account_id"])},
+    ).mappings().first()
+
+    if not row:
+        return HTMLResponse('<p class="pane-empty-text">Correo no encontrado.</p>', status_code=404)
+
+    eml_path = row["eml_storage_path"]
+    html_body = None
+    text_body = None
+    blocked_active_content = False
+
+    try:
+        raw = Path(eml_path).read_bytes()
+        parsed = email_lib.message_from_bytes(raw, policy=email_default)
+        for part in parsed.walk():
+            ct = part.get_content_type()
+            if ct == "text/html" and html_body is None:
+                payload = part.get_payload(decode=True)
+                charset = part.get_content_charset() or "utf-8"
+                try:
+                    html_body = payload.decode(charset, errors="replace")
+                except Exception:
+                    html_body = payload.decode("latin-1", errors="replace")
+            elif ct == "text/plain" and text_body is None:
+                payload = part.get_payload(decode=True)
+                charset = part.get_content_charset() or "utf-8"
+                try:
+                    text_body = payload.decode(charset, errors="replace")
+                except Exception:
+                    text_body = payload.decode("latin-1", errors="replace")
+
+        if html_body:
+            html_body, blocked_active_content = sanitize_html_body(
+                html_body, email_message_id=email_message_id
+            )
+    except Exception:
+        pass
+
+    ai_result = get_email_ai_result(db, email_message_id)
+    tipo = (ai_result or {}).get("tipo_correo", "")
+    prior = (ai_result or {}).get("prioridad_sugerida", "")
+    accion = (ai_result or {}).get("accion_sugerida", "")
+
+    dir_class = "is-in" if row["direction"] == "inbound" else "is-out"
+    dir_label = "Recibido" if row["direction"] == "inbound" else "Enviado"
+    sent_at = str(row["sent_at"])[:16] if row["sent_at"] else "Sin fecha"
+
+    ai_tags_html = ""
+    if tipo:
+        ai_tags_html += f'<span class="ai-badge ai-tipo-{tipo.replace("_", "-")}">{tipo}</span> '
+    if prior:
+        ai_tags_html += f'<span class="ai-badge ai-prioridad-{prior}">{prior}</span>'
+    if accion:
+        ai_tags_html += f'<span class="ai-hint" style="margin-left:6px;">{accion[:90]}</span>'
+
+    blocked_banner = ""
+    if blocked_active_content:
+        blocked_banner = (
+            '<div class="blocked-content-banner">'
+            '<span class="blocked-icon">🛡</span>'
+            '<span>Scripts y recursos activos bloqueados por seguridad. El contenido se muestra de forma segura.</span>'
+            '</div>'
+        )
+
+    if html_body:
+        import html as html_lib
+        srcdoc = html_lib.escape(html_body, quote=True)
+        body_section = (
+            f'{blocked_banner}'
+            f'<iframe class="inbox-email-iframe" '
+            f'sandbox="allow-popups allow-same-origin" '
+            f'srcdoc="{srcdoc}" '
+            f'style="width:100%;min-height:420px;border:none;display:block;">'
+            f'</iframe>'
+        )
+    elif text_body:
+        import html as html_lib
+        safe_text = html_lib.escape(text_body)
+        body_section = f'<pre class="inbox-email-preview" style="white-space:pre-wrap;">{safe_text}</pre>'
+    else:
+        body_section = '<p class="pane-empty-text">Este correo no tiene cuerpo de texto.</p>'
+
+    subject_safe = (row["subject"] or "(Sin asunto)").replace("<", "&lt;").replace(">", "&gt;")
+    from_safe = (f'{row["from_name"]} &lt;{row["from_email"]}&gt;' if row["from_name"] else (row["from_email"] or "?")).replace("<", "&lt;").replace(">", "&gt;")
+
+    html_out = f"""
+<div class="inbox-viewer-meta">
+    <div class="inbox-viewer-subject">{subject_safe}</div>
+    <div class="inbox-viewer-row">
+        <span class="inbox-dir-badge {dir_class}">{dir_label}</span>
+        <span class="inbox-viewer-from">De: {from_safe}</span>
+        <span class="inbox-viewer-date">{sent_at}</span>
+    </div>
+    {f'<div class="inbox-viewer-ai-row">{ai_tags_html}</div>' if ai_tags_html else ''}
+</div>
+<div class="inbox-viewer-body">
+    {body_section}
+</div>
+"""
+    return HTMLResponse(html_out)
+
+
 @router.get("/api/emails/{email_message_id}/cid/{content_id:path}")
 def serve_inline_attachment(
     request: Request,
