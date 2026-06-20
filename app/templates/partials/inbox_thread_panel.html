@@ -1,7 +1,8 @@
 {% set glpi_status_map = {1: "Nuevo", 2: "En proceso", 3: "Planificado", 4: "Pendiente", 5: "Resuelto", 6: "Cerrado"} %}
 {% set glpi_priority_map = {1: "Muy baja", 2: "Baja", 3: "Media", 4: "Alta", 5: "Muy alta", 6: "Mayor"} %}
 
-<div class="inbox-panel-header">
+<!-- Header solo visible en síntesis; desaparece al ver correos para maximizar el visor -->
+<div class="inbox-panel-header" x-show="view === 'synthesis'" x-cloak>
     <div>
         <h2 class="inbox-panel-title">{{ thread.title or "Hilo" }}</h2>
         <p class="inbox-panel-meta">
@@ -16,9 +17,9 @@
     </div>
 </div>
 
-<!-- Pestañas — estado vive en <main x-data> -->
+<!-- Pestañas — pills ultracompactos en modo correos (is-compact via Alpine) -->
 <div class="inbox-view-toggle">
-    <div class="inbox-view-tabs">
+    <div class="inbox-view-tabs" :class="{ 'is-compact': view === 'emails' }">
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'synthesis' }" @click="view = 'synthesis'">
             Síntesis IA
         </button>
@@ -163,8 +164,8 @@
 
         <div id="inbox-email-viewer" class="inbox-email-viewer-inner">
             {% if messages %}
-            <!-- Precarga el primer correo al activar la pestaña -->
-            <div hx-get="/api/emails/{{ messages[0].email_message_id }}/viewer-panel"
+            <!-- Precarga el primer correo; el botón ⋮ lo genera el backend con thread_id -->
+            <div hx-get="/api/emails/{{ messages[0].email_message_id }}/viewer-panel?thread_id={{ thread.id }}"
                  hx-trigger="load"
                  hx-target="#inbox-email-viewer"
                  hx-swap="innerHTML">
@@ -180,35 +181,6 @@
             </div>
             {% endif %}
         </div>
-
-        <!-- Barra de operaciones M:N (fork / copiar) -->
-        {% if messages %}
-        <div class="inbox-email-ops-bar">
-            {% for msg in messages %}
-            <template x-if="selectedEmailId === {{ msg.email_message_id }}">
-                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                    <span style="font-size:.75rem; color:var(--text-muted);">Correo seleccionado ·</span>
-                    <form method="post" action="/threads/{{ thread.id }}/fork-email/{{ msg.email_message_id }}" style="display:inline;">
-                        <button class="secondary-button" type="submit" style="font-size:.78rem;"
-                            {% if assistant_mode %}onclick="return confirm('Bifurcar creará un hilo nuevo con solo este correo. ¿Continuar?')"{% endif %}>
-                            Bifurcar
-                        </button>
-                    </form>
-                    {% if threads and threads|length > 1 %}
-                    <form method="post" action="/threads/{{ thread.id }}/copy-email/{{ msg.email_message_id }}" style="display:inline;">
-                        <select name="target_thread_id" class="form-input" style="font-size:.78rem; display:inline; width:auto;">
-                            {% for t in threads if t.id != thread.id %}
-                            <option value="{{ t.id }}">Hilo #{{ t.id }}: {{ (t.title or "(Sin título)")[:30] }}</option>
-                            {% endfor %}
-                        </select>
-                        <button class="secondary-button" type="submit" style="font-size:.78rem;">Copiar a hilo</button>
-                    </form>
-                    {% endif %}
-                </div>
-            </template>
-            {% endfor %}
-        </div>
-        {% endif %}
 
     </div><!-- /vista correos reales -->
 </div><!-- /inbox-view-toggle -->

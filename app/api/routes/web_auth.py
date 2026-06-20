@@ -1,7 +1,7 @@
 import json
-
 import mimetypes
 import os
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
@@ -2052,6 +2052,7 @@ def email_ai_tags(
 def email_viewer_panel(
     request: Request,
     email_message_id: int,
+    thread_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -2160,8 +2161,50 @@ def email_viewer_panel(
     subject_safe = (row["subject"] or "(Sin asunto)").replace("<", "&lt;").replace(">", "&gt;")
     from_safe = (f'{row["from_name"]} &lt;{row["from_email"]}&gt;' if row["from_name"] else (row["from_email"] or "?")).replace("<", "&lt;").replace(">", "&gt;")
 
+    # Menú ⋮ de acciones — solo si se conoce el hilo de contexto
+    action_menu_html = ""
+    if thread_id:
+        import html as html_lib2
+        threads_rows = db.execute(
+            text("""
+                SELECT id, title FROM gestor_tickets.system_threads
+                WHERE account_id = :account_id
+                ORDER BY updated_at DESC NULLS LAST
+                LIMIT 25
+            """),
+            {"account_id": int(user["account_id"])},
+        ).mappings().all()
+
+        copy_items = ""
+        for t in threads_rows:
+            if t["id"] != thread_id:
+                t_title = html_lib2.escape((t["title"] or "(Sin título)")[:40])
+                copy_items += (
+                    f'<form method="post" action="/threads/{thread_id}/copy-email/{email_message_id}">'
+                    f'<input type="hidden" name="target_thread_id" value="{t["id"]}">'
+                    f'<button class="inbox-email-menu-item" type="submit">'
+                    f'Copiar a: {t_title}'
+                    f'</button>'
+                    f'</form>'
+                )
+
+        fork_confirm = ""
+        action_menu_html = (
+            f'<div class="inbox-email-action-menu" x-data="{{ open: false }}" @click.outside="open = false">'
+            f'<button class="inbox-email-menu-btn" @click="open = !open" title="Acciones del correo">⋮</button>'
+            f'<div class="inbox-email-menu-dropdown" x-show="open" x-cloak>'
+            f'<form method="post" action="/threads/{thread_id}/fork-email/{email_message_id}">'
+            f'<button class="inbox-email-menu-item" type="submit">Bifurcar en nuevo hilo</button>'
+            f'</form>'
+            f'{"<hr class=inbox-email-menu-divider>" if copy_items else ""}'
+            f'{copy_items}'
+            f'</div>'
+            f'</div>'
+        )
+
     html_out = f"""
 <div class="inbox-viewer-meta">
+    {action_menu_html}
     <div class="inbox-viewer-subject">{subject_safe}</div>
     <div class="inbox-viewer-row">
         <span class="inbox-dir-badge {dir_class}">{dir_label}</span>

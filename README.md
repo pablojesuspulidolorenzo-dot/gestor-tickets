@@ -7,7 +7,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 ## Estado Actual
 
 - Ruta del proyecto en servidor: `/var/www/vhosts/gestor-tickets.es/docker/`
-- Version actual de la app: `0.1.56`
+- Version actual de la app: `0.1.57`
 - Stack: FastAPI, Jinja2, HTMX, PostgreSQL 17, GLPI, MariaDB, IMAP, Docker Compose
 - Esquema PostgreSQL principal: `gestor_tickets`
 - Archivo SQL de referencia: `gestor_tickets_v2_schema_postgresql17_sin_triggers.sql`
@@ -20,6 +20,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 - v0.1.54: corrección crítica de scope Alpine: x-data elevado a <main class="inbox-shell">, sidebar con x-show="view!=='emails'" + x-cloak, .inbox-emails-mode colapsa grid a 1fr, botón ← para volver a lista de hilos.
 - v0.1.55: reestructuración final tipo Outlook: col-izq alterna entre sidebar-hilos (síntesis) y sidebar-correos (emails); panel GLPI integrado dentro de x-show="view==='synthesis'"; visor ocupa el 100% de la col-der sin sub-columnas.
 - v0.1.56: scroll independiente por panel (min-height:0 en cadena flex) + divisor arrastrable entre columnas (JS nativo mousedown/mousemove/mouseup, CSS var --sidebar-w, rango 200-580px, handle con indicador visual al hover/drag).
+- v0.1.57: scroll verdaderamente aislado (body:has(.inbox-shell) overflow:hidden + app-shell flex-column); header panel oculto en modo correos (x-show); pestañas ultracompactas (is-compact via Alpine :class); botón ⋮ en cabecera del visor con dropdown Alpine (Bifurcar + Copiar a hilo N hilos); elimina barra ops-bar inferior.
 
 ## Reglas Criticas
 

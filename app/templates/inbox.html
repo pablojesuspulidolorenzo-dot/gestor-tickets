@@ -40,7 +40,7 @@
             <div class="inbox-email-card"
                  :class="{ 'is-selected': selectedEmailId === {{ mid }} }"
                  @click="selectedEmailId = {{ mid }}"
-                 hx-get="/api/emails/{{ mid }}/viewer-panel"
+                 hx-get="/api/emails/{{ mid }}/viewer-panel?thread_id={{ selected_thread.id }}"
                  hx-target="#inbox-email-viewer"
                  hx-swap="innerHTML"
                  hx-trigger="click">
