@@ -193,8 +193,7 @@
        class="inbox-email-list-sidebar"
        hx-swap-oob="outerHTML:#inbox-email-list-sidebar"
        x-show="view === 'emails'"
-       x-cloak
-       x-init="selectedEmailId = null">
+       style="display:none;">
     {% include "partials/inbox_email_list_sidebar.html" %}
 </aside>
 {% endif %}
