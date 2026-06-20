@@ -75,6 +75,13 @@ from app.services.ai_prompt_service import (
     list_templates,
 )
 from app.services.ai_call_history_service import get_call_detail, list_call_history
+from app.services.personal_account_service import (
+    create_personal_account,
+    detect_thread_siblings,
+    list_personal_accounts,
+    preview_personal_mailbox,
+    transfer_personal_email,
+)
 from app.services.account_settings_service import (
     get_account_settings,
     update_account_glpi,
@@ -2151,6 +2158,186 @@ def merge_thread(
         return RedirectResponse(url=f"/threads/{result['id']}?message=merged", status_code=303)
     except ValueError as exc:
         return RedirectResponse(url=f"/threads/{thread_id}?error={exc}", status_code=303)
+
+
+@router.get("/personal", response_class=HTMLResponse)
+def personal_accounts_page(
+    request: Request,
+    personal_account_id: int | None = None,
+    mailbox: str = "INBOX",
+    message: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Bandeja personal: gestión de cuentas IMAP privadas y transferencia."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    denied = _require_permission(user, "can_read_account_mail")
+    if denied:
+        return denied
+
+    accounts = list_personal_accounts(db, user_id=int(user["user_id"]))
+    preview = None
+    preview_error = None
+    selected_account = None
+
+    if personal_account_id:
+        selected_account = next((a for a in accounts if a["id"] == personal_account_id), None)
+        if selected_account:
+            try:
+                preview = preview_personal_mailbox(
+                    db,
+                    personal_account_id=personal_account_id,
+                    user_id=int(user["user_id"]),
+                    mailbox=mailbox,
+                    limit=30,
+                )
+            except Exception as exc:
+                preview_error = str(exc)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="personal.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="personal",
+            accounts=accounts,
+            selected_account=selected_account,
+            personal_account_id=personal_account_id,
+            mailbox=mailbox,
+            preview=preview,
+            preview_error=preview_error,
+            message=message,
+            error=error,
+        ),
+    )
+
+
+@router.post("/personal/accounts", response_class=HTMLResponse)
+def create_personal_account_route(
+    request: Request,
+    email: str = Form(...),
+    display_name: str = Form(""),
+    imap_host: str = Form(...),
+    imap_username: str = Form(...),
+    imap_password: str = Form(...),
+    imap_port: int = Form(993),
+    transfer_folder: str = Form("Transferidos"),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    try:
+        result = create_personal_account(
+            db,
+            account_id=int(user["account_id"]),
+            user_id=int(user["user_id"]),
+            email=email,
+            display_name=display_name or None,
+            imap_host=imap_host,
+            imap_username=imap_username,
+            imap_password=imap_password,
+            imap_port=imap_port,
+            transfer_folder=transfer_folder,
+        )
+        return RedirectResponse(
+            url=f"/personal?personal_account_id={result['id']}&message=saved",
+            status_code=303,
+        )
+    except Exception as exc:
+        return RedirectResponse(url=f"/personal?error={exc}", status_code=303)
+
+
+@router.get("/personal/detect-siblings", response_class=HTMLResponse)
+def detect_thread_siblings_route(
+    request: Request,
+    personal_account_id: int = 0,
+    mailbox: str = "INBOX",
+    uid: str = "",
+    db: Session = Depends(get_db),
+):
+    """HTMX partial: detecta correos hermanos en el hilo antes de transferir."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return HTMLResponse("")
+    try:
+        siblings = detect_thread_siblings(
+            db,
+            personal_account_id=personal_account_id,
+            user_id=int(user["user_id"]),
+            mailbox=mailbox,
+            uid=uid,
+        )
+    except Exception:
+        siblings = []
+
+    if not siblings:
+        return HTMLResponse("")
+
+    items = "".join(
+        f'<label class="checkbox-label">'
+        f'<input type="checkbox" name="sibling_uid" value="{s["uid"]}" checked> '
+        f'{s["subject"]} — {s["from_"]}</label>'
+        for s in siblings
+    )
+    return HTMLResponse(
+        f'<div class="assistant-hint" style="margin-top:10px;">'
+        f'<strong>Se detectaron {len(siblings)} correo(s) relacionados en el mismo hilo.</strong> '
+        f'Puedes transferirlos también:'
+        f'<div style="margin-top:8px; display:grid; gap:4px;">{items}</div>'
+        f'</div>'
+    )
+
+
+@router.post("/personal/transfer", response_class=HTMLResponse)
+def transfer_email_route(
+    request: Request,
+    personal_account_id: int = Form(...),
+    mailbox: str = Form(...),
+    uid: str = Form(...),
+    move_after: str = Form("1"),
+    sibling_uid: list[str] = Form(default=[]),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    target_account_id = int(user["account_id"])
+    user_id = int(user["user_id"])
+    move = move_after == "1"
+
+    errors = []
+    all_uids = [uid] + sibling_uid
+
+    for transfer_uid in all_uids:
+        try:
+            transfer_personal_email(
+                db,
+                personal_account_id=personal_account_id,
+                user_id=user_id,
+                mailbox=mailbox,
+                uid=transfer_uid,
+                target_account_id=target_account_id,
+                move_after_transfer=move,
+            )
+        except Exception as exc:
+            errors.append(f"UID {transfer_uid}: {exc}")
+
+    if errors:
+        err_str = "; ".join(errors)
+        return RedirectResponse(
+            url=f"/personal?personal_account_id={personal_account_id}&mailbox={mailbox}&error={err_str}",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url=f"/personal?personal_account_id={personal_account_id}&mailbox={mailbox}&message=transferred",
+        status_code=303,
+    )
 
 
 @router.post("/settings/assistant-mode", response_class=HTMLResponse)

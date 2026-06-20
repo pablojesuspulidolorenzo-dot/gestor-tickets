@@ -267,6 +267,7 @@ class PersonalMailAccount(Base):
     imap_port = Column(Integer, nullable=False, server_default=text("993"))
     imap_use_ssl = Column(Boolean, nullable=False, server_default=text("true"))
     active = Column(Boolean, nullable=False, server_default=text("true"))
+    transfer_folder = Column(Text, server_default=text("'Transferidos'"))
     last_validated_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))

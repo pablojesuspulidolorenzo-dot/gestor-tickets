@@ -682,3 +682,60 @@ def find_archived_message_for_occurrence(
         return None
 
     return dict(row)
+
+
+def archive_raw_eml_for_account(
+    db: Session,
+    *,
+    account_id: int,
+    raw_message: bytes,
+    mailbox: str = "personal-transfer",
+    uid: str = "0",
+    uidvalidity: str = "personal",
+) -> ArchivedEmailResult:
+    """
+    Archiva un .eml crudo directamente en la cuenta colaborativa sin abrir IMAP.
+    Usado por la transferencia de cuentas personales.
+    """
+    account = db.get(CollaborativeAccount, account_id)
+    if account is None:
+        raise ValueError("La cuenta colaborativa no existe.")
+
+    eml_sha256 = hashlib.sha256(raw_message).hexdigest()
+    eml_storage_path, eml_filename = _archive_path(account, mailbox, uidvalidity, uid, eml_sha256)
+    Path(eml_storage_path).write_bytes(raw_message)
+
+    parsed = message_from_bytes(raw_message, policy=default)
+
+    email_message_id, occurrence_id = _insert_or_update_message(
+        db,
+        account=account,
+        parsed=parsed,
+        raw_message=raw_message,
+        mailbox=mailbox,
+        uid=uid,
+        uidvalidity=uidvalidity,
+        flags=[],
+        eml_storage_path=eml_storage_path,
+        eml_filename=eml_filename,
+        eml_sha256=eml_sha256,
+    )
+
+    db.commit()
+
+    return ArchivedEmailResult(
+        ok=True,
+        account=account,
+        email_message_id=email_message_id,
+        occurrence_id=occurrence_id,
+        mailbox=mailbox,
+        uid=uid,
+        message_id=_clean_text(parsed.get("Message-ID")) or None,
+        subject=_decode_header_value(parsed.get("Subject")) or None,
+        eml_storage_path=eml_storage_path,
+        eml_sha256=eml_sha256,
+        size_bytes=len(raw_message),
+        seen_before=False,
+        seen_after=False,
+        message="Archivado desde cuenta personal.",
+    )

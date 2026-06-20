@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Correo Personal — Gestor Tickets{% endblock %}
+
+{% block content %}
+{% include "partials/nav.html" %}
+
+<main class="ai-config-shell">
+
+    <!-- Sidebar: lista de cuentas personales + formulario alta -->
+    <aside class="ai-config-sidebar">
+        <div class="ai-config-sidebar-header">
+            <div>
+                <p class="ai-config-kicker">{{ user.account_email }}</p>
+                <h2>Correo Personal</h2>
+            </div>
+        </div>
+
+        <div class="ai-config-endpoints">
+            {% if accounts %}
+                {% for acc in accounts %}
+                <a class="ai-config-endpoint {% if acc.id == personal_account_id %}is-selected{% endif %}"
+                   href="/personal?personal_account_id={{ acc.id }}">
+                    <div class="ai-config-endpoint-top">
+                        <span class="ai-config-endpoint-name">{{ acc.display_name or acc.email }}</span>
+                        <span class="ai-config-status {% if acc.active %}is-ok{% else %}is-muted{% endif %}">
+                            {{ "Activa" if acc.active else "Inactiva" }}
+                        </span>
+                    </div>
+                    <div class="ai-config-endpoint-url">{{ acc.imap_host }}</div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <div class="ai-config-empty">
+                    <p>Sin cuentas personales configuradas.</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Formulario: añadir cuenta personal -->
+        <div class="ai-config-form" style="border-top:1px solid var(--border); margin-top:auto;">
+            <h3 style="margin:0 0 12px;">Añadir cuenta</h3>
+            <form method="post" action="/personal/accounts" class="form-stack">
+                <label class="form-label ai-config-field">
+                    Email
+                    <input class="form-input" name="email" type="email" required placeholder="usuario@dominio.es">
+                </label>
+                <label class="form-label ai-config-field">
+                    Nombre visible
+                    <input class="form-input" name="display_name" placeholder="Mi correo personal">
+                </label>
+                <label class="form-label ai-config-field">
+                    Servidor IMAP
+                    <input class="form-input" name="imap_host" required placeholder="mail.dominio.es">
+                </label>
+                <label class="form-label ai-config-field">
+                    Usuario IMAP
+                    <input class="form-input" name="imap_username" required>
+                </label>
+                <label class="form-label ai-config-field">
+                    Contraseña IMAP
+                    <input class="form-input" type="password" name="imap_password" required autocomplete="new-password">
+                </label>
+                <label class="form-label ai-config-field">
+                    Carpeta de transferidos
+                    <input class="form-input" name="transfer_folder" value="Transferidos">
+                </label>
+                <button class="primary-button" type="submit">Guardar cuenta</button>
+            </form>
+        </div>
+    </aside>
+
+    <!-- Panel principal: bandeja personal -->
+    <section class="ai-config-main">
+
+        {% if message == 'saved' %}
+        <div class="scheduled-alert scheduled-alert-success ai-config-alert" style="margin:18px;">Cuenta guardada correctamente.</div>
+        {% elif message == 'transferred' %}
+        <div class="scheduled-alert scheduled-alert-success ai-config-alert" style="margin:18px;">
+            {% if assistant_mode %}
+            ✓ <strong>Transferencia completada.</strong> El correo ya está disponible en la cuenta colaborativa para todos los usuarios con acceso a ella. El pipeline IA lo habrá analizado automáticamente.
+            {% else %}
+            Correo transferido correctamente a la cuenta colaborativa.
+            {% endif %}
+        </div>
+        {% elif error %}
+        <div class="ai-config-alert is-error" style="margin:18px;">{{ error }}</div>
+        {% endif %}
+
+        {% if not selected_account %}
+        <div class="pane-empty-state">
+            <div class="pane-empty-icon">📮</div>
+            <h2 style="margin:0 0 8px;">Correo personal privado</h2>
+            <p class="pane-empty-text">
+                Las cuentas personales no almacenan correos hasta que tú lo decides.
+                Selecciona una cuenta de la lista o añade una nueva para navegar tu buzón en modo seguro.
+            </p>
+            {% if assistant_mode %}
+            <div class="assistant-hint" style="margin-top:14px;">
+                <strong>Modo asistente:</strong> Cuando transfieras un correo personal a la cuenta colaborativa, el sistema detectará si hay más correos del mismo hilo y te preguntará si quieres transferirlos también. El correo se moverá automáticamente a la carpeta de transferidos en tu servidor IMAP.
+            </div>
+            {% endif %}
+        </div>
+
+        {% elif preview_error %}
+        <div class="ai-config-form">
+            <div class="ai-config-alert is-error">Error al conectar con IMAP: {{ preview_error }}</div>
+        </div>
+
+        {% elif preview %}
+        <div class="ai-config-form" style="border-bottom:1px solid var(--border); padding-bottom:14px;">
+            <h3 style="margin:0 0 4px;">{{ selected_account.display_name or selected_account.email }}</h3>
+            <p class="ai-config-muted" style="margin:0;">
+                {{ preview.mailbox }} · {{ preview.messages|length }} mensaje(s) mostrado(s)
+                · <a href="/personal?personal_account_id={{ selected_account.id }}&mailbox=INBOX">INBOX</a>
+                / <a href="/personal?personal_account_id={{ selected_account.id }}&mailbox=INBOX.Sent">Enviados</a>
+            </p>
+        </div>
+
+        {% for msg in preview.messages %}
+        <div class="inbox-email-item {% if msg.already_transferred %}imap-intel-exact{% endif %}">
+            <div class="inbox-email-header">
+                <div>
+                    <strong>{{ msg.subject }}</strong>
+                    {% if msg.already_transferred %}
+                    <span class="imap-intel-badge is-exact">✓ Transferido</span>
+                    {% endif %}
+                </div>
+                <span class="inbox-thread-date">{{ msg.date or "" }}</span>
+            </div>
+            <div class="inbox-email-from">De: {{ msg.from_ }}</div>
+
+            {% if not msg.already_transferred %}
+            <div style="margin-top:10px;">
+                {% if assistant_mode %}
+                <details>
+                    <summary style="cursor:pointer; color:var(--primary-dark); font-weight:700; font-size:.875rem;">
+                        Transferir este correo a la cuenta colaborativa
+                    </summary>
+                    <div class="assistant-hint" style="margin:10px 0;">
+                        <strong>¿Qué ocurrirá?</strong> Este correo se descargará, se archivará en la cuenta colaborativa "{{ user.account_email }}" y quedará disponible para todos los usuarios con acceso. La IA lo analizará automáticamente. El correo se moverá a la carpeta "{{ selected_account.transfer_folder or 'Transferidos' }}" en tu servidor IMAP.
+                    </div>
+                    <div id="siblings-{{ msg.uid }}"
+                         hx-get="/personal/detect-siblings?personal_account_id={{ selected_account.id }}&mailbox={{ mailbox|urlencode }}&uid={{ msg.uid|urlencode }}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                    </div>
+                    <form method="post" action="/personal/transfer">
+                        <input type="hidden" name="personal_account_id" value="{{ selected_account.id }}">
+                        <input type="hidden" name="mailbox" value="{{ mailbox }}">
+                        <input type="hidden" name="uid" value="{{ msg.uid }}">
+                        <label class="checkbox-label" style="margin:10px 0;">
+                            <input type="checkbox" name="move_after" value="1" checked>
+                            Mover a "{{ selected_account.transfer_folder or 'Transferidos' }}" después de transferir
+                        </label>
+                        <button class="primary-button" type="submit" style="margin-top:8px;">
+                            Confirmar transferencia
+                        </button>
+                    </form>
+                </details>
+                {% else %}
+                <form method="post" action="/personal/transfer" style="display:inline;">
+                    <input type="hidden" name="personal_account_id" value="{{ selected_account.id }}">
+                    <input type="hidden" name="mailbox" value="{{ mailbox }}">
+                    <input type="hidden" name="uid" value="{{ msg.uid }}">
+                    <button class="secondary-button" type="submit" style="font-size:.8rem;">
+                        Transferir a cuenta colaborativa
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="pane-empty-state">
+            <p class="pane-empty-text">No hay mensajes en este buzón.</p>
+        </div>
+        {% endfor %}
+
+        {% endif %}
+    </section>
+</main>
+{% endblock %}
