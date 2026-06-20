@@ -7,9 +7,12 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+import datetime as _dt
+
 from app.services.email_archive_service import archive_message_from_imap_readonly
 from app.services.email_ai_processing_service import process_email as _ai_process_email
 from app.services.mailbox_preview_service import preview_unified_collaborative_mailbox
+from app.services.thread_ai_synthesis_service import synthesize_thread as _synthesize_thread
 from app.services.thread_service import create_thread_from_email
 
 
@@ -274,9 +277,12 @@ def configure_mail_ingestion_job(
     sent_folder_name: str = "INBOX.Sent",
     interval_minutes: int = 5,
     max_messages_per_folder: int = 200,
+    lookback_days: int = 7,
 ) -> dict:
     if status not in VALID_JOB_STATUSES:
         raise ValueError(f"Estado de ingesta no válido: {status}")
+    if not (1 <= lookback_days <= 365):
+        raise ValueError("lookback_days debe estar entre 1 y 365.")
 
     _get_account_email(db, account_id=account_id)
 
@@ -291,6 +297,7 @@ def configure_mail_ingestion_job(
                 sent_folder_name,
                 interval_minutes,
                 max_messages_per_folder,
+                lookback_days,
                 next_run_at,
                 created_by_user_id,
                 updated_by_user_id,
@@ -305,6 +312,7 @@ def configure_mail_ingestion_job(
                 :sent_folder_name,
                 :interval_minutes,
                 :max_messages_per_folder,
+                :lookback_days,
                 now(),
                 :user_id,
                 :user_id,
@@ -319,6 +327,7 @@ def configure_mail_ingestion_job(
                 sent_folder_name = EXCLUDED.sent_folder_name,
                 interval_minutes = EXCLUDED.interval_minutes,
                 max_messages_per_folder = EXCLUDED.max_messages_per_folder,
+                lookback_days = EXCLUDED.lookback_days,
                 next_run_at = CASE
                     WHEN gestor_tickets.mail_ingestion_jobs.next_run_at IS NULL THEN now()
                     ELSE gestor_tickets.mail_ingestion_jobs.next_run_at
@@ -336,6 +345,7 @@ def configure_mail_ingestion_job(
             "sent_folder_name": sent_folder_name,
             "interval_minutes": interval_minutes,
             "max_messages_per_folder": max_messages_per_folder,
+            "lookback_days": lookback_days,
             "user_id": user_id,
         },
     ).scalar_one()
@@ -746,6 +756,88 @@ def _finish_run(
     db.commit()
 
 
+def _get_thread_emails_ordered(db: Session, thread_id: int) -> list[int]:
+    """Devuelve los email_message_id del hilo ordenados cronológicamente (ASC)."""
+    rows = db.execute(
+        text("""
+            SELECT em.id
+            FROM gestor_tickets.email_thread_members etm
+            JOIN gestor_tickets.email_messages em ON em.id = etm.email_message_id
+            WHERE etm.thread_id = :tid AND etm.status = 'active'
+            ORDER BY em.sent_at ASC NULLS LAST, em.id ASC
+        """),
+        {"tid": thread_id},
+    ).scalars().all()
+    return [int(r) for r in rows]
+
+
+def _is_email_ai_processed(db: Session, email_message_id: int) -> bool:
+    status = db.execute(
+        text("""
+            SELECT status FROM gestor_tickets.email_ai_processing
+            WHERE email_message_id = :id
+            ORDER BY id DESC LIMIT 1
+        """),
+        {"id": email_message_id},
+    ).scalar_one_or_none()
+    return str(status or "") == "processed"
+
+
+def _process_thread_ai_chronological(
+    db: Session,
+    *,
+    thread_id: int,
+    account_id: int,
+    user_id: int | None,
+) -> dict[str, Any]:
+    """
+    Procesa con IA todos los correos pendientes de un hilo en orden cronológico
+    (más antiguo → más reciente) y actualiza la síntesis del hilo al final.
+    """
+    email_ids = _get_thread_emails_ordered(db, thread_id)
+    processed: list[int] = []
+    skipped: list[int] = []
+    errors_ai: list[dict] = []
+
+    for eid in email_ids:
+        if _is_email_ai_processed(db, eid):
+            skipped.append(eid)
+            continue
+        try:
+            result = _ai_process_email(
+                db,
+                email_message_id=eid,
+                account_id=account_id,
+                user_id=user_id,
+            )
+            if result.get("ok"):
+                processed.append(eid)
+            else:
+                errors_ai.append({"email_id": eid, "error": result.get("error"), "error_type": result.get("error_type")})
+        except Exception as exc:
+            errors_ai.append({"email_id": eid, "error": str(exc), "error_type": "exception"})
+
+    # Síntesis del hilo tras procesar todos los correos nuevos
+    synthesis_result: dict = {}
+    if processed:
+        try:
+            synthesis_result = _synthesize_thread(
+                db,
+                thread_id=thread_id,
+                account_id=account_id,
+                user_id=user_id or 0,
+            )
+        except Exception as exc:
+            synthesis_result = {"ok": False, "error": str(exc)}
+
+    return {
+        "emails_processed": processed,
+        "emails_skipped": skipped,
+        "emails_errors": errors_ai,
+        "synthesis": synthesis_result,
+    }
+
+
 def run_mail_ingestion_job(
     db: Session,
     *,
@@ -776,6 +868,13 @@ def run_mail_ingestion_job(
     scanned_inbox_count = 0
     scanned_sent_count = 0
 
+    # Ventana temporal: mensajes más antiguos que lookback_days se descartan
+    lookback_days = int(job.get("lookback_days") or 7)
+    lookback_cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=lookback_days)
+
+    # Acumula qué hilos recibieron correos nuevos para procesarlos después en orden
+    threads_with_new_emails: dict[int, list[int]] = {}  # thread_id → [email_message_id]
+
     try:
         preview = preview_unified_collaborative_mailbox(
             db,
@@ -792,6 +891,7 @@ def run_mail_ingestion_job(
 
         messages = preview_data.get("messages") or []
 
+        # ── Fase 1: Importar correos (con filtro de lookback) ─────────────────
         for item in messages:
             message = _plain(item)
             mailbox = str(message.get("mailbox") or "").strip()
@@ -801,6 +901,27 @@ def run_mail_ingestion_job(
                 error_count += 1
                 errors.append({"mailbox": mailbox, "uid": uid, "error": "Mensaje sin mailbox o uid."})
                 continue
+
+            # Filtro de ventana temporal (si la preview incluye fecha)
+            msg_date_raw = message.get("date") or message.get("sent_at")
+            if msg_date_raw:
+                try:
+                    if isinstance(msg_date_raw, str):
+                        from email.utils import parsedate_to_datetime
+                        msg_date = parsedate_to_datetime(msg_date_raw)
+                    else:
+                        msg_date = msg_date_raw
+                    if msg_date.tzinfo is None:
+                        msg_date = msg_date.replace(tzinfo=_dt.timezone.utc)
+                    if msg_date < lookback_cutoff:
+                        duplicate_count += 1
+                        duplicates.append({
+                            "mailbox": mailbox, "uid": uid,
+                            "skipped_reason": f"fuera de ventana lookback ({lookback_days}d)",
+                        })
+                        continue
+                except Exception:
+                    pass  # Si no se puede parsear la fecha, se importa igualmente
 
             existing_id = _existing_occurrence_id(
                 db,
@@ -812,11 +933,7 @@ def run_mail_ingestion_job(
 
             if existing_id:
                 duplicate_count += 1
-                _mark_duplicate_seen(
-                    db,
-                    occurrence_id=existing_id,
-                    run_id=run_id,
-                )
+                _mark_duplicate_seen(db, occurrence_id=existing_id, run_id=run_id)
                 duplicates.append({"mailbox": mailbox, "uid": uid, "occurrence_id": existing_id})
                 continue
 
@@ -835,20 +952,15 @@ def run_mail_ingestion_job(
                     db.execute(
                         text("""
                             UPDATE gestor_tickets.email_message_occurrences
-                            SET ingestion_run_id = :run_id,
-                                last_seen_at = now()
+                            SET ingestion_run_id = :run_id, last_seen_at = now()
                             WHERE id = :occurrence_id
                         """),
-                        {
-                            "run_id": run_id,
-                            "occurrence_id": occurrence_id,
-                        },
+                        {"run_id": run_id, "occurrence_id": occurrence_id},
                     )
                     db.commit()
 
                 thread_info = None
                 ticket_sync = None
-                ai_result = None
                 if email_message_id:
                     thread, thread_changed = create_thread_from_email(
                         db,
@@ -857,61 +969,61 @@ def run_mail_ingestion_job(
                         created_by_user_id=user_id,
                         reason="Creación automática por ingesta programada IMAP.",
                     )
-                    thread_info = {
-                        "thread_id": thread.get("id"),
-                        "thread_changed": thread_changed,
-                    }
+                    tid = int(thread["id"])
+                    thread_info = {"thread_id": tid, "thread_changed": thread_changed}
 
-                    try:
-                        ai_result = _ai_process_email(
-                            db,
-                            email_message_id=int(email_message_id),
-                            account_id=account_id,
-                            user_id=user_id,
-                        )
-                    except Exception as ai_exc:
-                        ai_result = {"ok": False, "error": str(ai_exc), "error_type": "ingestion_hook"}
+                    # Registrar para procesado IA posterior (por hilo)
+                    if tid not in threads_with_new_emails:
+                        threads_with_new_emails[tid] = []
+                    threads_with_new_emails[tid].append(int(email_message_id))
 
                     ticket = _active_glpi_ticket_for_thread(
-                        db,
-                        account_id=account_id,
-                        thread_id=int(thread["id"]),
+                        db, account_id=account_id, thread_id=tid,
                     )
                     if ticket:
                         ticket_sync = _auto_sync_ingested_email_to_ticket(
                             db,
                             account_id=account_id,
                             ticket=ticket,
-                            thread_id=int(thread["id"]),
+                            thread_id=tid,
                             email_message_id=int(email_message_id),
                             user_id=user_id,
                         )
 
                 imported_count += 1
-                imported.append(
-                    {
-                        "mailbox": mailbox,
-                        "uid": uid,
-                        "email_message_id": email_message_id,
-                        "occurrence_id": occurrence_id,
-                        "thread": thread_info,
-                        "ticket_sync": ticket_sync,
-                        "ai": ai_result,
-                    }
-                )
+                imported.append({
+                    "mailbox": mailbox,
+                    "uid": uid,
+                    "email_message_id": email_message_id,
+                    "occurrence_id": occurrence_id,
+                    "thread": thread_info,
+                    "ticket_sync": ticket_sync,
+                })
 
             except Exception as exc:
                 error_count += 1
                 errors.append({"mailbox": mailbox, "uid": uid, "error": str(exc)})
 
-        run_status = "success" if error_count == 0 else ("partial_error" if imported_count or duplicate_count else "failed")
+        # ── Fase 2: Procesado IA por hilo en orden cronológico ────────────────
+        ai_results: list[dict[str, Any]] = []
+        for tid, _new_ids in threads_with_new_emails.items():
+            thread_ai = _process_thread_ai_chronological(
+                db, thread_id=tid, account_id=account_id, user_id=user_id,
+            )
+            ai_results.append({"thread_id": tid, "result": thread_ai})
+
+        run_status = "success" if error_count == 0 else (
+            "partial_error" if imported_count or duplicate_count else "failed"
+        )
         error_message = None if error_count == 0 else f"{error_count} error(es) durante la ingesta."
 
         details = {
             "mailboxes": mailboxes,
+            "lookback_days": lookback_days,
             "imported": imported,
             "duplicates": duplicates,
             "errors": errors,
+            "ai_processing": ai_results,
             "safety": {
                 "imap_readonly": True,
                 "body_peek": True,

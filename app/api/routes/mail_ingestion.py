@@ -59,6 +59,7 @@ def configure_job(
             sent_folder_name=payload.sent_folder_name,
             interval_minutes=payload.interval_minutes,
             max_messages_per_folder=payload.max_messages_per_folder,
+            lookback_days=payload.lookback_days,
         )
         return ConfigureMailIngestionJobResponse(
             ok=True,

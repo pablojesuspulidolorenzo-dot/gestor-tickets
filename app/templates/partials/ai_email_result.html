@@ -1,14 +1,34 @@
+{% set urgencia_labels = {"inmediata": "Urgente ahora", "alta": "Alta", "normal": "Normal", "baja": "Baja"} %}
+{% set tono_labels = {"neutro": "Neutro", "satisfecho": "Satisfecho", "impaciente": "Impaciente", "frustrado": "Frustrado", "critico": "Crítico"} %}
+
 {% if ok %}
 <div class="ai-result-card">
+
+    <!-- Cabecera: tipo, prioridad, urgencia, tono -->
     <div class="ai-result-header">
         <span class="ai-result-title">Análisis IA</span>
-        <span class="ai-badge ai-tipo-{{ result.tipo_correo | replace('_', '-') }}">{{ result.tipo_correo | replace('_', ' ') }}</span>
-        <span class="ai-badge ai-prioridad-{{ result.prioridad_sugerida }}">{{ result.prioridad_sugerida }}</span>
+        <span class="ai-badge ai-tipo-{{ result.tipo_correo | replace('_', '-') }}">
+            {{ result.tipo_correo | replace('_', ' ') if result.tipo_correo else "?" }}
+        </span>
+        <span class="ai-badge ai-prioridad-{{ result.prioridad_sugerida }}">
+            {{ result.prioridad_sugerida if result.prioridad_sugerida else "?" }}
+        </span>
+        {% if result.urgencia_atencion %}
+        <span class="ai-badge ai-urgencia-{{ result.urgencia_atencion }}">
+            {{ urgencia_labels.get(result.urgencia_atencion, result.urgencia_atencion) }}
+        </span>
+        {% endif %}
+        {% if result.tono_cliente %}
+        <span class="ai-badge ai-tono-{{ result.tono_cliente }}">
+            {{ tono_labels.get(result.tono_cliente, result.tono_cliente) }}
+        </span>
+        {% endif %}
         {% if result.requiere_revision_humana %}
         <span class="ai-badge ai-badge-warning">Revisión humana</span>
         {% endif %}
     </div>
 
+    <!-- Resumen del problema -->
     {% if result.summary_json and result.summary_json.problema_principal %}
     <div class="ai-result-row">
         <span class="ai-result-label">Problema</span>
@@ -16,10 +36,10 @@
     </div>
     {% endif %}
 
-    {% if result.accion_sugerida %}
+    {% if result.summary_json and result.summary_json.nueva_informacion %}
     <div class="ai-result-row">
-        <span class="ai-result-label">Acción sugerida</span>
-        <span class="ai-result-value">{{ result.accion_sugerida }}</span>
+        <span class="ai-result-label">Novedad</span>
+        <span class="ai-result-value">{{ result.summary_json.nueva_informacion }}</span>
     </div>
     {% endif %}
 
@@ -30,14 +50,79 @@
     </div>
     {% endif %}
 
+    <!-- Acciones propuestas -->
+    {% if result.acciones_propuestas_json %}
+    <div class="ai-result-section">
+        <span class="ai-result-label" style="display:block; margin-bottom:6px;">Acciones propuestas</span>
+        {% for accion in result.acciones_propuestas_json %}
+        <div class="ai-action-item ai-action-conf-{{ 'high' if accion.confianza >= 0.85 else ('med' if accion.confianza >= 0.65 else 'low') }}">
+            <span class="ai-action-code">{{ accion.accion }}</span>
+            <span class="ai-action-conf">{{ (accion.confianza * 100) | int }}%</span>
+            {% if accion.motivo %}
+            <span class="ai-action-motivo">{{ accion.motivo }}</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% elif result.accion_sugerida %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Acción sugerida</span>
+        <span class="ai-result-value">{{ result.accion_sugerida }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Evento de calendario -->
+    {% if result.evento_calendario_json %}
+    {% set ev = result.evento_calendario_json %}
+    <div class="ai-result-section ai-calendar-event">
+        <span class="ai-result-label" style="display:block; margin-bottom:4px;">📅 Evento detectado</span>
+        <div class="ai-result-row">
+            <span class="ai-result-label">Título</span>
+            <span class="ai-result-value">{{ ev.titulo or "(sin título)" }}</span>
+        </div>
+        {% if ev.fecha_propuesta %}
+        <div class="ai-result-row">
+            <span class="ai-result-label">Fecha</span>
+            <span class="ai-result-value">{{ ev.fecha_propuesta[:16] | replace("T", " ") }}</span>
+        </div>
+        {% endif %}
+        {% if ev.participantes %}
+        <div class="ai-result-row">
+            <span class="ai-result-label">Participantes</span>
+            <span class="ai-result-value">{{ ev.participantes | join(', ') }}</span>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Contactos detectados -->
+    {% if result.contactos_detectados_json %}
+    <div class="ai-result-section">
+        <span class="ai-result-label" style="display:block; margin-bottom:6px;">👤 Contactos detectados</span>
+        {% for c in result.contactos_detectados_json %}
+        <div class="ai-contact-item">
+            <strong>{{ c.nombre or c.email }}</strong>
+            {% if c.nombre and c.email %} · <a href="mailto:{{ c.email }}">{{ c.email }}</a>{% endif %}
+            {% if c.telefono %} · {{ c.telefono }}{% endif %}
+            {% if c.empresa %} · <em>{{ c.empresa }}</em>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Pie -->
     <div class="ai-result-footer">
+        {% if result.destinatario_tipo %}
+        <span class="ai-hint">Dirigido: {{ result.destinatario_tipo | replace('_', ' ') }}</span>
+        {% endif %}
         {% if result.needs_thread_context %}
         <span class="ai-hint">Contexto de hilo recomendado</span>
         {% endif %}
         {% if result.extraction_confidence is not none %}
-        <span class="ai-hint">Confianza: {{ (result.extraction_confidence * 100) | int }}%</span>
+        <span class="ai-hint">Confianza global: {{ (result.extraction_confidence * 100) | int }}%</span>
         {% endif %}
     </div>
+
 </div>
 {% else %}
 <div class="scheduled-alert scheduled-alert-error" style="margin: 8px 0;">

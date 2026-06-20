@@ -13,6 +13,7 @@ class ConfigureMailIngestionJobRequest(BaseModel):
     sent_folder_name: str = "INBOX.Sent"
     interval_minutes: int = Field(default=5, ge=1, le=1440)
     max_messages_per_folder: int = Field(default=200, ge=1)
+    lookback_days: int = Field(default=7, ge=1, le=365)
 
 
 class MailIngestionJobSummary(BaseModel):
@@ -25,6 +26,7 @@ class MailIngestionJobSummary(BaseModel):
     sent_folder_name: str
     interval_minutes: int
     max_messages_per_folder: int
+    lookback_days: int = 7
     last_started_at: datetime | None
     last_success_at: datetime | None
     last_error_at: datetime | None

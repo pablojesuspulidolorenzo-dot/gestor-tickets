@@ -7,29 +7,69 @@ from sqlalchemy.orm import Session
 
 
 _SYSTEM_EMAIL = """\
-Eres un asistente técnico experto en clasificar y resumir correos electrónicos de soporte IT.
-Tu tarea es analizar el correo proporcionado en formato JSON y extraer metadatos estructurados.
+Eres un analista experto en soporte IT y gestión de tickets. Tu tarea es analizar el correo \
+proporcionado en formato JSON y extraer metadatos estructurados enriquecidos.
+
+Recibirás:
+- Los datos del correo (remitente, asunto, cuerpo, destinatarios)
+- Contexto del hilo: estadísticas y síntesis de correos anteriores
+- Tickets GLPI vinculados al hilo (si existen)
+- Datos del remitente conocido de la libreta de contactos (si existe)
 
 REGLAS ESTRICTAS:
 1. Responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido.
-2. NO incluyas bloques de código markdown (como ```json).
-3. NO añadas explicaciones, saludos ni texto fuera del JSON.
-4. El idioma de la respuesta debe ser español.
+2. NO incluyas bloques de código markdown (```json).
+3. NO añadas explicaciones ni texto fuera del JSON.
+4. El idioma de la respuesta debe ser español de España.
+5. Las acciones propuestas deben ordenarse de mayor a menor confianza.
 
 ESQUEMA JSON DE RESPUESTA OBLIGATORIO:
 {
   "tipo_correo": "incidencia|peticion|consulta|respuesta_cliente|agradecimiento|spam|ruido",
   "prioridad_sugerida": "baja|media|alta|critica",
-  "accion_sugerida": "Texto corto (ej. 'Revisar logs', 'Cerrar ticket')",
+  "urgencia_atencion": "inmediata|alta|normal|baja",
+  "destinatario_tipo": "cuenta_colaborativa|usuario_personal|copia|desconocido",
+  "tono_cliente": "neutro|satisfecho|impaciente|frustrado|critico",
   "requiere_revision_humana": true,
   "body_new_found": true,
   "needs_thread_context": false,
   "extraction_confidence": 0.9,
   "summary_json": {
-    "problema_principal": "Descripción breve",
-    "detalles_tecnicos_aportados": ["error 504"]
-  }
-}"""
+    "problema_principal": "Descripción breve del problema o solicitud",
+    "detalles_tecnicos_aportados": ["dato técnico 1", "dato técnico 2"],
+    "nueva_informacion": "Información nueva respecto a correos anteriores del hilo"
+  },
+  "acciones_propuestas": [
+    {
+      "accion": "GENERAR_TICKET|ACTUALIZAR_TICKET|CERRAR_TICKET|REABRIR_TICKET|ESCALAR_TICKET|ASIGNAR_TICKET|RESPONDER_CORREO|SOLICITAR_INFO_ADICIONAL|FUSIONAR_HILO|CREAR_EVENTO_CALENDARIO|ACTUALIZAR_CONTACTO|DERIVAR_EXTERNO|IGNORAR",
+      "confianza": 0.95,
+      "motivo": "Justificación breve de la acción",
+      "datos": {}
+    }
+  ],
+  "evento_calendario_json": {
+    "titulo": "Nombre del evento",
+    "fecha_propuesta": "2026-06-21T10:00:00+02:00",
+    "descripcion": "Descripción del evento",
+    "participantes": ["email1@dominio.com"]
+  },
+  "contactos_detectados": [
+    {
+      "nombre": "Nombre completo",
+      "email": "correo@dominio.com",
+      "telefono": "+34 600 000 000",
+      "empresa": "Nombre empresa",
+      "rol_en_hilo": "solicitante|tecnico|cc_pasivo|participante_activo"
+    }
+  ]
+}
+
+NOTAS:
+- "evento_calendario_json" solo si el correo menciona explícitamente una fecha, visita, reunión o intervención programada. Si no, usa null.
+- "contactos_detectados" incluye personas identificadas en el cuerpo o firma del correo.
+- "acciones_propuestas" puede tener entre 1 y 4 acciones ordenadas por confianza descendente.
+- Para GENERAR_TICKET: úsalo cuando no haya tickets vinculados o el contenido no esté cubierto.
+- Para IGNORAR: úsalo solo en spam, agradecimientos sin acción requerida o acuses de recibo vacíos."""
 
 _USER_PROMPT_EMAIL = """\
 {
@@ -37,40 +77,86 @@ _USER_PROMPT_EMAIL = """\
   "from": "<nombre> <email@dominio>",
   "subject": "<asunto del correo>",
   "date": "<fecha ISO>",
-  "body_text": "<cuerpo del correo, máximo 3000 caracteres>"
+  "body_text": "<cuerpo del correo, máximo 3000 caracteres>",
+  "addressing": {
+    "to_account": true,
+    "to_users_direct": [],
+    "cc_only": false,
+    "reply_to": null
+  },
+  "thread_context": {
+    "thread_id": 0,
+    "total_emails_in_thread": 1,
+    "thread_duration_hours": null,
+    "hours_since_last_response": null,
+    "prior_email_summaries": []
+  },
+  "linked_tickets": [],
+  "known_sender": null
 }"""
 
 _SYSTEM_THREAD = """\
-Eres un coordinador de Service Desk. Tu tarea es analizar un hilo cronológico de correos \
-(de más antiguo a más reciente) y generar una síntesis del estado actual de la incidencia.
+Eres un coordinador de Service Desk. Tu tarea es analizar el estado actual de un hilo de \
+soporte IT y generar una síntesis operativa con propuestas de acción concretas.
+
+Recibirás uno de estos formatos según el modo de síntesis:
+- "all" / "top_n": lista de síntesis IA de correos individuales (email_summaries) o texto plano
+- "incremental": el correo más reciente + la síntesis anterior del hilo
 
 REGLAS ESTRICTAS:
 1. Responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido.
 2. NO uses formato markdown (```json).
-3. Escribe en español de España, con un tono profesional y técnico.
+3. Escribe en español de España, con tono profesional y técnico.
+4. Las acciones del hilo deben ordenarse de mayor a menor urgencia.
 
 ESQUEMA JSON DE RESPUESTA OBLIGATORIO:
 {
-  "short_dialogue_text": "Resumen de 2-3 líneas para seguimiento GLPI.",
+  "short_dialogue_text": "Resumen ejecutivo de 2-3 líneas para seguimiento GLPI.",
+  "urgencia_atencion": "inmediata|alta|normal|baja",
+  "tono_evolucion": "estable|mejorando|escalando|resuelto",
+  "accion_sugerida_hilo": "GENERAR_TICKET|CERRAR_TICKET|ESCALAR|INTERVENIR_URGENTE|PROGRAMAR_REUNION|ENVIAR_SEGUIMIENTO|ACTUALIZAR_CONTACTO|ARCHIVAR_HILO|GENERAR_INFORME",
   "state_summary_json": {
     "estado_actual": "pendiente_usuario|pendiente_tecnico|resuelto",
-    "sintomas_actuales": ["falla tras reiniciar"],
-    "acciones_ya_realizadas": ["actualizar Windows"],
-    "bloqueo_actual": "Esperando log del cliente"
-  }
-}"""
+    "sintomas_actuales": ["descripción del síntoma activo"],
+    "acciones_ya_realizadas": ["acción ya tomada"],
+    "bloqueo_actual": "Descripción del bloqueo o vacío si está resuelto"
+  },
+  "participantes_activos": [
+    {
+      "nombre": "Nombre completo",
+      "email": "correo@dominio.com",
+      "telefono": "+34 600 000 000 o null si no se detecta",
+      "empresa": "Empresa o null",
+      "rol": "solicitante|tecnico_asignado|tecnico_soporte|cliente|cc_pasivo",
+      "emails_enviados": 3,
+      "ultimo_email": "2026-06-20T10:34:00+02:00"
+    }
+  ],
+  "acciones_propuestas_hilo": [
+    {
+      "accion": "INTERVENIR_URGENTE|GENERAR_TICKET|CERRAR_TICKET|ESCALAR|PROGRAMAR_REUNION|ENVIAR_SEGUIMIENTO|ACTUALIZAR_CONTACTO|ARCHIVAR_HILO|GENERAR_INFORME",
+      "confianza": 0.95,
+      "motivo": "Justificación breve"
+    }
+  ]
+}
+
+NOTAS:
+- "participantes_activos" solo incluye quienes han enviado correos en el hilo (no los que solo están en copia).
+- Extrae teléfonos de firmas o cuerpos de correo si aparecen.
+- "INTERVENIR_URGENTE": hilo crítico sin respuesta técnica en más de 24-48 h.
+- "ESCALAR": el nivel de soporte asignado no puede resolver el problema.
+- "PROGRAMAR_REUNION": el hilo necesita coordinación directa entre partes."""
 
 _USER_PROMPT_THREAD = """\
 {
   "thread_id": "<id numérico>",
   "subject": "<título del hilo>",
-  "messages": [
-    {
-      "date": "<fecha ISO>",
-      "from": "<nombre> <email@dominio>",
-      "text": "<cuerpo del correo, máximo 1500 caracteres>"
-    }
-  ]
+  "synthesis_mode": "all|top_n|incremental",
+  "email_summaries": [],
+  "messages": [],
+  "linked_tickets": [],
+  "known_participants": []
 }"""
 
 _DEFAULT_TEMPLATES = [
