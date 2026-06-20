@@ -1,0 +1,120 @@
+{#
+  Snippet: tarjetas de acciones propuestas para la pestaña Sugerencias.
+  Contexto esperado: ai_acciones (list), thread_id (int)
+  Scope Alpine.js externo debe proveer: showTicketForm, showCalendarPanel, view
+#}
+{% set action_labels = {
+    'GENERAR_TICKET': 'Generar ticket',
+    'ACTUALIZAR_TICKET': 'Actualizar ticket',
+    'CERRAR_TICKET': 'Cerrar ticket',
+    'REABRIR_TICKET': 'Reabrir ticket',
+    'ESCALAR_TICKET': 'Escalar ticket',
+    'ESCALAR': 'Escalar',
+    'ASIGNAR_TICKET': 'Asignar ticket',
+    'RESPONDER_CORREO': 'Responder correo',
+    'SOLICITAR_INFO_ADICIONAL': 'Solicitar info',
+    'ENVIAR_SEGUIMIENTO': 'Enviar seguimiento',
+    'FUSIONAR_HILO': 'Fusionar hilo',
+    'CREAR_EVENTO_CALENDARIO': 'Crear evento',
+    'PROGRAMAR_REUNION': 'Programar reunión',
+    'ACTUALIZAR_CONTACTO': 'Actualizar contacto',
+    'DERIVAR_EXTERNO': 'Derivar externo',
+    'INTERVENIR_URGENTE': 'Intervención urgente',
+    'IGNORAR': 'Ignorar',
+    'ARCHIVAR_HILO': 'Archivar hilo',
+    'GENERAR_INFORME': 'Generar informe',
+} %}
+{% if ai_acciones %}
+{% for accion in ai_acciones %}
+{% set conf = accion.confianza %}
+{% set conf_pct = (conf * 100) | int %}
+{% set conf_cls = 'high' if conf >= 0.85 else ('med' if conf >= 0.65 else 'low') %}
+<div class="ai-suggestion-card ai-suggestion-conf-{{ conf_cls }}"
+     x-data="{ dismissed: false }" x-show="!dismissed" x-cloak>
+    <div class="ai-suggestion-header">
+        <span class="ai-action-code">{{ action_labels.get(accion.accion, accion.accion) }}</span>
+        <span class="ai-action-conf ai-action-conf-{{ conf_cls }}">{{ conf_pct }}%</span>
+    </div>
+    {% if accion.motivo %}
+    <p class="ai-suggestion-motivo">{{ accion.motivo }}</p>
+    {% endif %}
+    <div class="ai-suggestion-actions">
+
+        {% if accion.accion in ('GENERAR_TICKET', 'INTERVENIR_URGENTE') %}
+        <button class="primary-button suggestion-exec-btn"
+                @click="showTicketForm = !showTicketForm"
+                hx-post="/threads/{{ thread_id }}/ai-action/record"
+                hx-vals='{"action_code": "{{ accion.accion }}", "outcome": "navigated", "confidence": {{ conf }}}'
+                hx-swap="none">
+            Crear ticket GLPI
+        </button>
+
+        {% elif accion.accion in ('RESPONDER_CORREO', 'SOLICITAR_INFO_ADICIONAL', 'ENVIAR_SEGUIMIENTO') %}
+        <button class="primary-button suggestion-exec-btn"
+                @click="view = 'emails'"
+                hx-post="/threads/{{ thread_id }}/ai-action/record"
+                hx-vals='{"action_code": "{{ accion.accion }}", "outcome": "navigated", "confidence": {{ conf }}}'
+                hx-swap="none">
+            Ir a correos
+        </button>
+
+        {% elif accion.accion == 'DERIVAR_EXTERNO' %}
+        <button class="primary-button suggestion-exec-btn"
+                @click="view = 'emails'"
+                hx-post="/threads/{{ thread_id }}/ai-action/record"
+                hx-vals='{"action_code": "DERIVAR_EXTERNO", "outcome": "navigated", "confidence": {{ conf }}}'
+                hx-swap="none">
+            Ir a correos (reenviar)
+        </button>
+
+        {% elif accion.accion in ('ACTUALIZAR_TICKET', 'CERRAR_TICKET', 'REABRIR_TICKET',
+                                    'ESCALAR_TICKET', 'ASIGNAR_TICKET', 'ESCALAR') %}
+        <button class="primary-button suggestion-exec-btn"
+                @click="view = 'glpi'"
+                hx-post="/threads/{{ thread_id }}/ai-action/record"
+                hx-vals='{"action_code": "{{ accion.accion }}", "outcome": "navigated", "confidence": {{ conf }}}'
+                hx-swap="none">
+            Ver tickets GLPI
+        </button>
+
+        {% elif accion.accion == 'ACTUALIZAR_CONTACTO' %}
+        <button class="primary-button suggestion-exec-btn"
+                @click="view = 'participants'"
+                hx-post="/threads/{{ thread_id }}/ai-action/record"
+                hx-vals='{"action_code": "ACTUALIZAR_CONTACTO", "outcome": "navigated", "confidence": {{ conf }}}'
+                hx-swap="none">
+            Ver participantes
+        </button>
+
+        {% elif accion.accion == 'FUSIONAR_HILO' %}
+        <button class="primary-button suggestion-exec-btn"
+                @click="view = 'timeline'">
+            Ver cronología
+        </button>
+
+        {% elif accion.accion in ('CREAR_EVENTO_CALENDARIO', 'PROGRAMAR_REUNION') %}
+        <button class="primary-button suggestion-exec-btn"
+                @click="showCalendarPanel = !showCalendarPanel"
+                hx-post="/threads/{{ thread_id }}/ai-action/record"
+                hx-vals='{"action_code": "{{ accion.accion }}", "outcome": "navigated", "confidence": {{ conf }}}'
+                hx-swap="none">
+            Ver evento sugerido
+        </button>
+
+        {% else %}
+        <span class="ai-suggestion-info-only">Revisar y actuar manualmente</span>
+        {% endif %}
+
+        <button class="suggestion-dismiss-btn"
+                @click="dismissed = true"
+                hx-post="/threads/{{ thread_id }}/ai-action/record"
+                hx-vals='{"action_code": "{{ accion.accion }}", "outcome": "dismissed", "confidence": {{ conf }}}'
+                hx-swap="none">
+            Descartar
+        </button>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<p class="pane-empty-text">Sin acciones propuestas. Usa "Reprocesar hilo ↺" en la pestaña Síntesis IA para generarlas.</p>
+{% endif %}

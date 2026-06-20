@@ -1,0 +1,61 @@
+{#
+  Snippet: tarjetas de participantes para la pestaña Participantes.
+  Contexto esperado: ai_participants (list), thread_id (int)
+#}
+{% set rol_labels = {
+    'solicitante': 'Solicitante',
+    'tecnico_asignado': 'Técnico',
+    'tecnico_soporte': 'Soporte',
+    'cliente': 'Cliente',
+    'cc_pasivo': 'CC',
+    'participante_activo': 'Participante',
+} %}
+{% if ai_participants %}
+{% for p in ai_participants %}
+<div class="ai-participant-card">
+    <div class="ai-participant-header">
+        <strong>{{ p.nombre or p.email or '?' }}</strong>
+        {% if p.rol %}
+        <span class="ai-badge ai-badge-role">{{ rol_labels.get(p.rol, p.rol) }}</span>
+        {% endif %}
+        {% if p.emails_enviados %}
+        <span class="ai-hint">{{ p.emails_enviados }} correo{{ 's' if p.emails_enviados != 1 else '' }}</span>
+        {% endif %}
+    </div>
+    <div class="ai-participant-detail">
+        {% if p.email %}
+        <a href="mailto:{{ p.email }}" class="participant-email">{{ p.email }}</a>
+        {% endif %}
+        {% if p.telefono %}
+        <span class="participant-field">{{ p.telefono }}</span>
+        {% endif %}
+        {% if p.empresa %}
+        <em class="participant-field">{{ p.empresa }}</em>
+        {% endif %}
+    </div>
+    {% if p.email %}
+    <div class="ai-participant-actions">
+        <form hx-post="/threads/{{ thread_id }}/contacts/save-participant"
+              hx-swap="outerHTML"
+              hx-target="this"
+              style="display:inline;">
+            <input type="hidden" name="email" value="{{ p.email }}">
+            <input type="hidden" name="name" value="{{ p.nombre or '' }}">
+            <input type="hidden" name="phone" value="{{ p.telefono or '' }}">
+            <input type="hidden" name="company" value="{{ p.empresa or '' }}">
+            <button type="submit" class="suggestion-exec-btn secondary-button"
+                    style="font-size:.78rem; padding:3px 10px;">
+                Guardar en libreta
+            </button>
+        </form>
+        <a href="mailto:{{ p.email }}" class="suggestion-exec-btn secondary-button"
+           style="font-size:.78rem; padding:3px 10px; text-decoration:none;">
+            Enviar correo
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<p class="pane-empty-text">Sin participantes identificados. La IA extrae participantes del análisis del hilo.</p>
+{% endif %}

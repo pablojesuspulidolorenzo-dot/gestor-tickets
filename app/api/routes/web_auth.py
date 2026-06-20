@@ -69,6 +69,7 @@ from app.services.thread_service import (
 from app.services.email_ai_processing_service import get_email_ai_result, process_email
 from app.services.thread_ai_synthesis_service import get_thread_ai_synthesis, synthesize_thread
 from app.services.mail_ingestion_service import reprocess_thread_ai
+from app.services.contact_book_service import upsert_contact
 from app.services.ai_prompt_service import (
     activate_version,
     create_version,
@@ -841,12 +842,10 @@ def thread_live_updates(
     db: Session = Depends(get_db),
 ):
     """
-    Polling endpoint de bajo impacto para el panel de hilo.
-
-    Retorna 204 (sin cuerpo) si nada ha cambiado → HTMX no toca el DOM.
-    Retorna HTML con OOB swaps solo para los fragmentos que sí cambiaron:
-    - Síntesis IA: si synthesized_at es más reciente que el que el cliente tiene.
-    - Count de correos: si el total en BD difiere del que el cliente tiene.
+    Polling endpoint de bajo impacto (60 s).
+    Retorna 204 si nada cambió → HTMX no modifica el DOM → cero parpadeo.
+    Si algo cambió retorna OOB swaps selectivos (síntesis, sugerencias,
+    participantes, badges de count).
     """
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
@@ -864,10 +863,33 @@ def thread_live_updates(
         and db_synth_ts
         and db_synth_ts != synth_ts
     ):
+        # Síntesis IA resumida
         synth_context = _template_context(request, ok=True, result=current_synth)
         synth_html = templates.get_template("partials/ai_thread_result.html").render(synth_context)
+        oob_parts.append(f'<div hx-swap-oob="innerHTML:#inbox-ai-result">{synth_html}</div>')
+
+        # Tarjetas de acciones (Sugerencias)
+        ai_acciones = current_synth.get("acciones_propuestas_json") or []
+        sug_context = _template_context(request, ai_acciones=ai_acciones, thread_id=thread_id)
+        sug_html = templates.get_template("partials/ai_suggestions_actions.html").render(sug_context)
+        oob_parts.append(f'<div hx-swap-oob="innerHTML:#inbox-suggestions-actions">{sug_html}</div>')
+
+        # Tarjetas de participantes
+        ai_participants = current_synth.get("participantes_json") or []
+        part_context = _template_context(request, ai_participants=ai_participants, thread_id=thread_id)
+        part_html = templates.get_template("partials/ai_participants_content.html").render(part_context)
+        oob_parts.append(f'<div hx-swap-oob="innerHTML:#inbox-participants-content">{part_html}</div>')
+
+        # Badges de count (Sugerencias y Participantes)
+        n_sug = len(ai_acciones)
+        n_part = len(ai_participants)
+        sug_style = "" if n_sug > 0 else ' style="display:none"'
+        part_style = "" if n_part > 0 else ' style="display:none"'
         oob_parts.append(
-            f'<div hx-swap-oob="innerHTML:#inbox-ai-result">{synth_html}</div>'
+            f'<span id="thread-suggestions-count-badge" class="inbox-tab-count"{sug_style}'
+            f' hx-swap-oob="outerHTML:#thread-suggestions-count-badge">{n_sug}</span>'
+            f'<span id="thread-participants-count-badge" class="inbox-tab-count"{part_style}'
+            f' hx-swap-oob="outerHTML:#thread-participants-count-badge">{n_part}</span>'
         )
 
     # ── Comprobar count de correos ───────────────────────────────────────────
@@ -893,6 +915,80 @@ def thread_live_updates(
         return Response(status_code=204)
 
     return HTMLResponse("".join(oob_parts))
+
+
+@router.post("/threads/{thread_id}/ai-action/record", response_class=HTMLResponse)
+def thread_ai_action_record(
+    request: Request,
+    thread_id: int,
+    action_code: str = Form(default=""),
+    outcome: str = Form(default="dismissed"),
+    confidence: float = Form(default=0.0),
+    db: Session = Depends(get_db),
+):
+    """Registra en ai_action_executions que el usuario aceptó/descartó una sugerencia IA."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+
+    if action_code:
+        try:
+            db.execute(
+                text("""
+                    INSERT INTO gestor_tickets.ai_action_executions
+                        (account_id, thread_id, suggested_action,
+                         executed_by_user_id, executed_at, outcome, ai_confidence)
+                    VALUES (:account_id, :thread_id, :action, :user_id, now(), :outcome, :conf)
+                """),
+                {
+                    "account_id": int(user["account_id"]),
+                    "thread_id": thread_id,
+                    "action": action_code[:100],
+                    "user_id": int(user["user_id"]),
+                    "outcome": outcome[:50],
+                    "conf": min(1.0, max(0.0, confidence)),
+                },
+            )
+            db.commit()
+        except Exception:
+            pass  # No interrumpir el flujo del usuario por un fallo de trazabilidad
+
+    return Response(status_code=204)
+
+
+@router.post("/threads/{thread_id}/contacts/save-participant", response_class=HTMLResponse)
+def thread_save_participant(
+    request: Request,
+    thread_id: int,
+    email: str = Form(default=""),
+    name: str = Form(default=""),
+    phone: str = Form(default=""),
+    company: str = Form(default=""),
+    db: Session = Depends(get_db),
+):
+    """Guarda o actualiza un participante en la libreta de contactos."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+
+    if not email:
+        return HTMLResponse('<span class="ai-badge ai-urgencia-baja">Sin email</span>')
+
+    try:
+        upsert_contact(
+            db,
+            account_id=int(user["account_id"]),
+            email=email.strip(),
+            name=name.strip() or None,
+            phone=phone.strip() or None,
+            company=company.strip() or None,
+            source="manual",
+        )
+        return HTMLResponse('<span class="ai-badge" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0;">Guardado ✓</span>')
+    except Exception:
+        return HTMLResponse('<span class="ai-badge ai-urgencia-inmediata">Error al guardar</span>')
 
 
 @router.post("/threads/{thread_id}/reprocess-ai", response_class=HTMLResponse)

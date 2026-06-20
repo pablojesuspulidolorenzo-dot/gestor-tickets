@@ -56,19 +56,14 @@
     {% endif %}
     {% endif %}
 
-    <!-- Acciones propuestas para el hilo -->
+    <!-- Acciones y participantes → ver pestañas "Sugerencias" y "Participantes" -->
     {% if result.acciones_propuestas_json %}
-    <div class="ai-result-section">
-        <span class="ai-result-label" style="display:block; margin-bottom:6px;">Acciones propuestas</span>
-        {% for accion in result.acciones_propuestas_json %}
-        <div class="ai-action-item ai-action-conf-{{ 'high' if accion.confianza >= 0.85 else ('med' if accion.confianza >= 0.65 else 'low') }}">
-            <span class="ai-action-code">{{ accion.accion }}</span>
-            <span class="ai-action-conf">{{ (accion.confianza * 100) | int }}%</span>
-            {% if accion.motivo %}
-            <span class="ai-action-motivo">{{ accion.motivo }}</span>
-            {% endif %}
-        </div>
-        {% endfor %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Sugerencias</span>
+        <span class="ai-result-value" style="color:#0369a1;">
+            {{ result.acciones_propuestas_json | length }} acción{{ 'es' if result.acciones_propuestas_json | length != 1 else '' }} propuesta{{ 's' if result.acciones_propuestas_json | length != 1 else '' }}
+            · ver pestaña <strong>Sugerencias</strong>
+        </span>
     </div>
     {% elif result.accion_sugerida %}
     <div class="ai-result-row">
@@ -76,29 +71,13 @@
         <span class="ai-result-value">{{ result.accion_sugerida }}</span>
     </div>
     {% endif %}
-
-    <!-- Participantes activos -->
     {% if result.participantes_json %}
-    <div class="ai-result-section">
-        <span class="ai-result-label" style="display:block; margin-bottom:6px;">Participantes activos</span>
-        {% for p in result.participantes_json %}
-        <div class="ai-participant-item">
-            <div class="ai-participant-header">
-                <strong>{{ p.nombre or p.email }}</strong>
-                {% if p.rol %}
-                <span class="ai-badge ai-badge-role">{{ rol_labels.get(p.rol, p.rol) }}</span>
-                {% endif %}
-                {% if p.emails_enviados %}
-                <span class="ai-hint">{{ p.emails_enviados }} correo{{ 's' if p.emails_enviados != 1 else '' }}</span>
-                {% endif %}
-            </div>
-            <div class="ai-participant-detail">
-                {% if p.email %}<a href="mailto:{{ p.email }}">{{ p.email }}</a>{% endif %}
-                {% if p.telefono %} · {{ p.telefono }}{% endif %}
-                {% if p.empresa %} · <em>{{ p.empresa }}</em>{% endif %}
-            </div>
-        </div>
-        {% endfor %}
+    <div class="ai-result-row">
+        <span class="ai-result-label">Participantes</span>
+        <span class="ai-result-value" style="color:#0369a1;">
+            {{ result.participantes_json | length }} identificado{{ 's' if result.participantes_json | length != 1 else '' }}
+            · ver pestaña <strong>Participantes</strong>
+        </span>
     </div>
     {% endif %}
 

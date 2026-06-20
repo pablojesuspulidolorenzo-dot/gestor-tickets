@@ -1031,6 +1031,45 @@ body:has(.inbox-shell) .inbox-shell { flex: 1; min-height: 0; height: auto; }
 .ai-participant-detail a { color: var(--primary); text-decoration: none; }
 .ai-badge-role { background: #f0f9ff; color: #0369a1; border-color: #bae6fd; font-size: .75rem; }
 
+/* ── Pestañas inbox: scroll horizontal si hay 6+ pestañas ─ */
+.inbox-view-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.inbox-view-tabs::-webkit-scrollbar { display: none; }
+
+/* ── Tarjetas de sugerencias IA ───────────────────────────── */
+.ai-suggestion-card {
+    border: 1px solid var(--border);
+    border-left: 3px solid #9ca3af;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #fafafa;
+}
+.ai-suggestion-card.ai-suggestion-conf-high { border-left-color: #16a34a; background: #f0fdf4; }
+.ai-suggestion-card.ai-suggestion-conf-med  { border-left-color: #ca8a04; background: #fefce8; }
+.ai-suggestion-card.ai-suggestion-conf-low  { border-left-color: #9ca3af; }
+.ai-suggestion-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.ai-suggestion-motivo { font-size: .83rem; color: #4b5563; margin: 4px 0 10px; line-height: 1.4; }
+.ai-suggestion-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.suggestion-exec-btn { font-size: .8rem !important; padding: 4px 12px !important; }
+.suggestion-dismiss-btn {
+    font-size: .78rem; color: #9ca3af; background: none; border: none;
+    padding: 4px 6px; cursor: pointer; border-radius: 4px;
+}
+.suggestion-dismiss-btn:hover { color: #6b7280; background: #f3f4f6; }
+.ai-suggestion-info-only { font-size: .78rem; color: #9ca3af; font-style: italic; }
+
+/* ── Tarjetas de participantes ─────────────────────────── */
+.ai-participant-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    background: #fff;
+}
+.ai-participant-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.participant-email { font-size: .83rem; color: #0369a1; }
+.participant-field { font-size: .82rem; color: #6b7280; margin-left: 8px; }
+
 /* ── Resumen de reprocesado IA ─────────────────────────── */
 .ai-reprocess-summary {
     font-size: .85rem;

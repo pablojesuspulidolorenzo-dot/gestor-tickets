@@ -17,12 +17,22 @@
     </div>
 </div>
 
-<!-- Pestañas — 4 vistas; pills ultracompactos en modo correos -->
+<!-- Pestañas — 6 vistas; pills ultracompactos en modo correos -->
 <div class="inbox-view-toggle">
     <div class="inbox-view-tabs" :class="{ 'is-compact': view === 'emails' }">
 
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'synthesis' }" @click="view = 'synthesis'">
             Síntesis IA
+        </button>
+
+        <button class="inbox-view-tab" :class="{ 'is-active': view === 'suggestions' }" @click="view = 'suggestions'">
+            Sugerencias
+            <span id="thread-suggestions-count-badge" class="inbox-tab-count"{% if not (ai_thread_result and ai_thread_result.acciones_propuestas_json) %} style="display:none"{% endif %}>{{ (ai_thread_result.acciones_propuestas_json | length) if ai_thread_result and ai_thread_result.acciones_propuestas_json else 0 }}</span>
+        </button>
+
+        <button class="inbox-view-tab" :class="{ 'is-active': view === 'participants' }" @click="view = 'participants'">
+            Participantes
+            <span id="thread-participants-count-badge" class="inbox-tab-count"{% if not (ai_thread_result and ai_thread_result.participantes_json) %} style="display:none"{% endif %}>{{ (ai_thread_result.participantes_json | length) if ai_thread_result and ai_thread_result.participantes_json else 0 }}</span>
         </button>
 
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'timeline' }" @click="view = 'timeline'">
@@ -31,13 +41,13 @@
         </button>
 
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'glpi' }" @click="view = 'glpi'">
-            Tickets GLPI
+            GLPI
             {% if glpi_tickets %}<span class="inbox-tab-count">{{ glpi_tickets|length }}</span>{% endif %}
         </button>
 
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'emails' }"
                 @click="view = 'emails'; selectedEmailId = selectedEmailId || {{ (messages | last).email_message_id if messages else 'null' }}">
-            Correos reales
+            Correos
             <span id="thread-email-count-badge" class="inbox-tab-count"{% if not messages %} style="display:none"{% endif %}>{{ messages|length if messages else 0 }}</span>
         </button>
 
@@ -120,6 +130,72 @@
         </section>
 
     </div><!-- /vista síntesis -->
+
+    <!-- ══ VISTA SUGERENCIAS ════════════════════════════════════════════ -->
+    <div x-show="view === 'suggestions'" style="display:none;" class="inbox-synthesis-view"
+         x-data="{ showTicketForm: false, showCalendarPanel: false }">
+
+        <!-- Panel de creación de ticket GLPI (se despliega desde los botones de acción) -->
+        <div x-show="showTicketForm" x-cloak>
+            <section class="inbox-panel-section" style="border:1.5px solid #bfdbfe; background:#eff6ff;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h3 class="inbox-section-title" style="margin:0;">Crear ticket GLPI</h3>
+                    <button class="text-button" @click="showTicketForm = false" style="font-size:1rem; color:#6b7280;">&times; Cerrar</button>
+                </div>
+                <form method="post" action="/threads/{{ thread.id }}/glpi/create-ticket" class="form-stack">
+                    <label class="form-label">Título del ticket
+                        <input class="form-input" type="text" name="title"
+                               value="{{ ai_thread_result.short_dialogue_text[:120] if ai_thread_result and ai_thread_result.short_dialogue_text else thread.title or '' }}">
+                    </label>
+                    <label class="form-label">Contraseña GLPI
+                        <input class="form-input" type="password" name="glpi_password" required>
+                    </label>
+                    <button class="primary-button" type="submit">Crear en GLPI</button>
+                </form>
+            </section>
+        </div>
+
+        <!-- Panel de evento de calendario (se despliega desde acciones CREAR_EVENTO/PROGRAMAR_REUNION) -->
+        <div x-show="showCalendarPanel" x-cloak>
+            <section class="inbox-panel-section" style="border:1.5px solid #c7d2fe; background:#eef2ff;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h3 class="inbox-section-title" style="margin:0;">Evento sugerido por IA</h3>
+                    <button class="text-button" @click="showCalendarPanel = false" style="font-size:1rem; color:#6b7280;">&times; Cerrar</button>
+                </div>
+                {% if ai_thread_result and ai_thread_result.state_summary_json %}
+                <p class="pane-empty-text" style="margin:0;">
+                    La IA recomienda programar una reunión o intervención presencial.
+                    Consulta el resumen del hilo para más contexto y crea el evento en tu calendario.
+                </p>
+                {% else %}
+                <p class="pane-empty-text" style="margin:0;">No hay datos adicionales del evento en la síntesis actual.</p>
+                {% endif %}
+            </section>
+        </div>
+
+        <!-- Tarjetas de acciones propuestas (OOB-updatable vía live poll) -->
+        <section class="inbox-panel-section">
+            <h3 class="inbox-section-title">Acciones propuestas por IA</h3>
+            <div id="inbox-suggestions-actions">
+                {% with ai_acciones=ai_thread_result.acciones_propuestas_json if ai_thread_result and ai_thread_result.acciones_propuestas_json else [], thread_id=thread.id %}
+                {% include "partials/ai_suggestions_actions.html" %}
+                {% endwith %}
+            </div>
+        </section>
+
+    </div><!-- /vista sugerencias -->
+
+    <!-- ══ VISTA PARTICIPANTES ══════════════════════════════════════════ -->
+    <div x-show="view === 'participants'" style="display:none;" class="inbox-synthesis-view">
+        <section class="inbox-panel-section">
+            <h3 class="inbox-section-title">Participantes activos en el hilo</h3>
+            <div id="inbox-participants-content">
+                {% with ai_participants=ai_thread_result.participantes_json if ai_thread_result and ai_thread_result.participantes_json else [], thread_id=thread.id %}
+                {% include "partials/ai_participants_content.html" %}
+                {% endwith %}
+            </div>
+        </section>
+    </div><!-- /vista participantes -->
 
     <!-- ══ VISTA CRONOLOGÍA ═══════════════════════════════════════════ -->
     <div x-show="view === 'timeline'" style="display:none;" class="inbox-synthesis-view">
