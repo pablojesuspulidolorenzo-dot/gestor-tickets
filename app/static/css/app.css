@@ -1030,3 +1030,14 @@ body:has(.inbox-shell) .inbox-shell { flex: 1; min-height: 0; height: auto; }
 .ai-participant-detail { font-size: .83rem; color: var(--text-muted); margin-top: 2px; }
 .ai-participant-detail a { color: var(--primary); text-decoration: none; }
 .ai-badge-role { background: #f0f9ff; color: #0369a1; border-color: #bae6fd; font-size: .75rem; }
+
+/* ── Resumen de reprocesado IA ─────────────────────────── */
+.ai-reprocess-summary {
+    font-size: .85rem;
+    padding: 8px 12px;
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+    border-radius: 8px;
+    color: #9a3412;
+    margin-bottom: 10px;
+}

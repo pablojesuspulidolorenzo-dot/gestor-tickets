@@ -68,6 +68,7 @@ from app.services.thread_service import (
 )
 from app.services.email_ai_processing_service import get_email_ai_result, process_email
 from app.services.thread_ai_synthesis_service import get_thread_ai_synthesis, synthesize_thread
+from app.services.mail_ingestion_service import reprocess_thread_ai
 from app.services.ai_prompt_service import (
     activate_version,
     create_version,
@@ -829,6 +830,55 @@ def thread_synthesize_ai(
         name="partials/ai_thread_result.html",
         context=context,
     )
+
+
+@router.post("/threads/{thread_id}/reprocess-ai", response_class=HTMLResponse)
+def thread_reprocess_ai(
+    request: Request,
+    thread_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Reprocesa con IA todos los correos del hilo en orden cronológico
+    y regenera la síntesis. Devuelve el nuevo resultado de síntesis
+    más un resumen del proceso.
+    """
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+
+    result = reprocess_thread_ai(
+        db,
+        thread_id=thread_id,
+        account_id=int(user["account_id"]),
+        user_id=int(user["user_id"]),
+    )
+
+    total = result.get("emails_total", 0)
+    n_ok = len(result.get("emails_processed", []))
+    n_skip = len(result.get("emails_skipped", []))
+    n_err = len(result.get("emails_errors", []))
+    synthesis = result.get("synthesis") or {}
+
+    # El bloque superior muestra el resumen del proceso
+    resumen_html = (
+        f'<div class="ai-reprocess-summary">'
+        f'<strong>Reprocesado completo:</strong> '
+        f'{n_ok} correo{"s" if n_ok != 1 else ""} analizados'
+        f'{f", {n_err} con error" if n_err else ""}'
+        f'{f", {n_skip} omitidos (ya procesados)" if n_skip else ""}'
+        f' de {total} total{"es" if total != 1 else ""}.'
+        f'</div>'
+    )
+
+    # El bloque inferior muestra el nuevo resultado de síntesis
+    synthesis_context = _template_context(request, **synthesis)
+    synthesis_rendered = templates.get_template(
+        "partials/ai_thread_result.html"
+    ).render(synthesis_context)
+
+    return HTMLResponse(resumen_html + synthesis_rendered)
 
 
 @router.get("/tickets", response_class=HTMLResponse)

@@ -69,15 +69,26 @@
 
         <!-- Síntesis IA del hilo -->
         <section class="inbox-panel-section">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-                <h3 class="inbox-section-title" style="margin:0;">Análisis IA del hilo</h3>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                <h3 class="inbox-section-title" style="margin:0; flex:1;">Análisis IA del hilo</h3>
                 <button class="secondary-button"
                         style="font-size:.8rem; padding:5px 12px;"
                         hx-post="/threads/{{ thread.id }}/synthesize-ai"
                         hx-target="#inbox-ai-result"
                         hx-swap="innerHTML"
-                        hx-indicator="#inbox-ai-spinner">
+                        hx-indicator="#inbox-ai-spinner"
+                        title="Regenerar solo la síntesis del hilo con los datos actuales">
                     Sintetizar
+                </button>
+                <button class="secondary-button"
+                        style="font-size:.8rem; padding:5px 12px; border-color: #fdba74; color: #9a3412;"
+                        hx-post="/threads/{{ thread.id }}/reprocess-ai"
+                        hx-target="#inbox-ai-result"
+                        hx-swap="innerHTML"
+                        hx-indicator="#inbox-ai-spinner"
+                        hx-confirm="¿Reprocesar todos los correos del hilo con IA? Esto analizará cada correo en orden cronológico y regenerará la síntesis. Puede tardar varios segundos."
+                        title="Reprocesar todos los correos del hilo con IA en orden cronológico y regenerar la síntesis">
+                    Reprocesar hilo ↺
                 </button>
                 <span id="inbox-ai-spinner" class="htmx-indicator ai-spinner"> IA…</span>
             </div>

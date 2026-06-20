@@ -789,10 +789,13 @@ def _process_thread_ai_chronological(
     thread_id: int,
     account_id: int,
     user_id: int | None,
+    force: bool = False,
 ) -> dict[str, Any]:
     """
-    Procesa con IA todos los correos pendientes de un hilo en orden cronológico
-    (más antiguo → más reciente) y actualiza la síntesis del hilo al final.
+    Procesa con IA los correos de un hilo en orden cronológico y actualiza la síntesis.
+
+    force=True: reprocesa todos los correos aunque ya estén procesados.
+    force=False: solo procesa los que aún no tienen status='processed'.
     """
     email_ids = _get_thread_emails_ordered(db, thread_id)
     processed: list[int] = []
@@ -800,7 +803,7 @@ def _process_thread_ai_chronological(
     errors_ai: list[dict] = []
 
     for eid in email_ids:
-        if _is_email_ai_processed(db, eid):
+        if not force and _is_email_ai_processed(db, eid):
             skipped.append(eid)
             continue
         try:
@@ -813,13 +816,17 @@ def _process_thread_ai_chronological(
             if result.get("ok"):
                 processed.append(eid)
             else:
-                errors_ai.append({"email_id": eid, "error": result.get("error"), "error_type": result.get("error_type")})
+                errors_ai.append({
+                    "email_id": eid,
+                    "error": result.get("error"),
+                    "error_type": result.get("error_type"),
+                })
         except Exception as exc:
             errors_ai.append({"email_id": eid, "error": str(exc), "error_type": "exception"})
 
-    # Síntesis del hilo tras procesar todos los correos nuevos
+    # Síntesis del hilo tras procesar todos los correos
     synthesis_result: dict = {}
-    if processed:
+    if processed or force:
         try:
             synthesis_result = _synthesize_thread(
                 db,
@@ -831,11 +838,33 @@ def _process_thread_ai_chronological(
             synthesis_result = {"ok": False, "error": str(exc)}
 
     return {
+        "emails_total": len(email_ids),
         "emails_processed": processed,
         "emails_skipped": skipped,
         "emails_errors": errors_ai,
         "synthesis": synthesis_result,
     }
+
+
+def reprocess_thread_ai(
+    db: Session,
+    *,
+    thread_id: int,
+    account_id: int,
+    user_id: int | None,
+) -> dict[str, Any]:
+    """
+    Fuerza el reprocesado completo con IA de todos los correos de un hilo
+    (más antiguo → más reciente) y regenera la síntesis del hilo.
+    Equivale al pipeline post-ingesta pero aplicado sobre un hilo ya existente.
+    """
+    return _process_thread_ai_chronological(
+        db,
+        thread_id=thread_id,
+        account_id=account_id,
+        user_id=user_id,
+        force=True,
+    )
 
 
 def run_mail_ingestion_job(
