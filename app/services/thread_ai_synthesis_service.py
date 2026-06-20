@@ -442,7 +442,9 @@ def synthesize_thread(
         parsed["urgencia_atencion"] = "normal"
 
     _save_synthesis_result(db, record_id, call_id, parsed)
-    return {"ok": True, "result": parsed}
+    # Devolver el registro guardado en BD (claves consistentes con get_thread_ai_synthesis)
+    saved = get_thread_ai_synthesis(db, thread_id)
+    return {"ok": True, "result": saved}
 
 
 def get_thread_ai_synthesis(db: Session, thread_id: int) -> dict | None:

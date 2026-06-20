@@ -523,7 +523,9 @@ def process_email(
         _process_detected_contacts(db, account_id=account_id, contactos=contactos)
 
     _save_processing_result(db, record_id, call_id, parsed, addressing["destinatario_tipo"])
-    return {"ok": True, "result": parsed}
+    # Devolver el registro guardado en BD (claves consistentes con get_email_ai_result)
+    saved = get_email_ai_result(db, email_message_id)
+    return {"ok": True, "result": saved}
 
 
 def get_email_ai_result(db: Session, email_message_id: int) -> dict | None:

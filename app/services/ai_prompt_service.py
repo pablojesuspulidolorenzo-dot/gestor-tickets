@@ -185,8 +185,19 @@ _DEFAULT_TEMPLATES = [
 ]
 
 
+_AUTO_NOTES = "Versión inicial generada automáticamente"
+
+
 def seed_default_templates(db: Session) -> None:
-    """Inserta las plantillas base con v1 activa si no existen."""
+    """
+    Inserta las plantillas base y mantiene los prompts auto-generados actualizados.
+
+    - Si no existe ninguna versión para un template, crea la v1 activa.
+    - Si la versión activa tiene notes='Versión inicial generada automáticamente' y el
+      contenido difiere del código, actualiza su contenido in-place (sin crear una versión
+      nueva). Esto garantiza que los prompts del código siempre estén vigentes sin
+      sobrescribir versiones creadas manualmente por el usuario.
+    """
     for tmpl in _DEFAULT_TEMPLATES:
         existing = db.execute(
             text("SELECT id FROM gestor_tickets.ai_prompt_templates WHERE key = :key"),
@@ -211,12 +222,18 @@ def seed_default_templates(db: Session) -> None:
                 },
             ).scalar_one())
 
-        has_versions = db.execute(
-            text("SELECT 1 FROM gestor_tickets.ai_prompt_versions WHERE template_id = :tid LIMIT 1"),
+        active_version = db.execute(
+            text("""
+                SELECT id, system_prompt_template, user_prompt_template, notes
+                FROM gestor_tickets.ai_prompt_versions
+                WHERE template_id = :tid AND is_active = true
+                LIMIT 1
+            """),
             {"tid": template_id},
-        ).first()
+        ).mappings().first()
 
-        if not has_versions:
+        if not active_version:
+            # No hay versiones: crear v1 activa
             db.execute(
                 text("""
                     INSERT INTO gestor_tickets.ai_prompt_versions (
@@ -229,15 +246,35 @@ def seed_default_templates(db: Session) -> None:
                         :tid, 1, :system_prompt, :user_prompt,
                         '{}', '{}', '{}', '{}',
                         false, 120, true,
-                        'Versión inicial generada automáticamente'
+                        :notes
                     )
                 """),
                 {
                     "tid": template_id,
                     "system_prompt": tmpl["system_prompt"],
                     "user_prompt": tmpl["user_prompt"],
+                    "notes": _AUTO_NOTES,
                 },
             )
+        elif active_version["notes"] == _AUTO_NOTES:
+            # Versión auto-generada activa: actualizar contenido si ha cambiado
+            if (
+                active_version["system_prompt_template"] != tmpl["system_prompt"]
+                or active_version["user_prompt_template"] != tmpl["user_prompt"]
+            ):
+                db.execute(
+                    text("""
+                        UPDATE gestor_tickets.ai_prompt_versions
+                        SET system_prompt_template = :system_prompt,
+                            user_prompt_template   = :user_prompt
+                        WHERE id = :vid
+                    """),
+                    {
+                        "vid": int(active_version["id"]),
+                        "system_prompt": tmpl["system_prompt"],
+                        "user_prompt": tmpl["user_prompt"],
+                    },
+                )
 
     db.commit()
 
