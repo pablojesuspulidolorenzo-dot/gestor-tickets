@@ -750,7 +750,7 @@ def get_email_ai_result(db: Session, email_message_id: int) -> dict | None:
     row = db.execute(
         text("""
             SELECT id, status, tipo_correo, prioridad_sugerida, accion_sugerida,
-                   requiere_revision_humana, body_new_found, needs_thread_context,
+                   requiere_revision_humana, body_new, body_new_found, needs_thread_context,
                    extraction_confidence, summary_json, error_message, processed_at,
                    urgencia_atencion, destinatario_tipo, tono_cliente,
                    acciones_propuestas_json, evento_calendario_json,
