@@ -1658,3 +1658,4 @@ body:has(.inbox-shell) .inbox-shell { flex: 1; min-height: 0; height: auto; }
     color: inherit;
     opacity: .92;
 }
+.chat-body--raw { opacity: .65; font-style: italic; }

@@ -489,12 +489,20 @@ def list_thread_messages(
                 em.original_imap_uid,
                 em.body_text_preview,
                 em.has_attachments,
-                em.eml_storage_path
+                em.eml_storage_path,
+                eap.summary_json
             FROM gestor_tickets.email_thread_members etm
             JOIN gestor_tickets.email_messages em
               ON em.id = etm.email_message_id
             JOIN gestor_tickets.system_threads st
               ON st.id = etm.thread_id
+            LEFT JOIN LATERAL (
+                SELECT summary_json
+                FROM gestor_tickets.email_ai_processing
+                WHERE email_message_id = em.id
+                ORDER BY id DESC
+                LIMIT 1
+            ) eap ON true
             WHERE etm.thread_id = :thread_id
               AND st.account_id = :account_id
               AND etm.status = 'active'

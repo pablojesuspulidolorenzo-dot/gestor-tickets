@@ -350,6 +350,8 @@
             <div class="chat-thread">
             {% for msg in messages %}
             {% set is_out = msg.direction == 'outbound' %}
+            {% set sj = msg.summary_json if msg.summary_json else {} %}
+            {% set ai_text = sj.get("nueva_informacion") or sj.get("problema_principal") or "" %}
             <div class="chat-bubble-row {{ 'is-out' if is_out else 'is-in' }}">
                 <div class="chat-bubble {{ 'is-out' if is_out else 'is-in' }}">
                     <div class="chat-meta">
@@ -357,8 +359,10 @@
                         <span class="chat-time">{{ (msg.sent_at | string)[5:16] | replace("T"," ") if msg.sent_at else "" }}</span>
                         {% if msg.has_attachments %}<span class="chat-attach-icon" title="Tiene adjuntos">📎</span>{% endif %}
                     </div>
-                    {% if msg.body_text_preview %}
-                    <p class="chat-body">{{ msg.body_text_preview[:280] }}{% if msg.body_text_preview|length > 280 %}…{% endif %}</p>
+                    {% if ai_text %}
+                    <p class="chat-body">{{ ai_text }}</p>
+                    {% elif msg.body_text_preview %}
+                    <p class="chat-body chat-body--raw">{{ msg.body_text_preview[:280] }}{% if msg.body_text_preview|length > 280 %}…{% endif %}</p>
                     {% endif %}
                 </div>
             </div>
