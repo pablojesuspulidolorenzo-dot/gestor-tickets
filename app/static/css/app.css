@@ -1595,3 +1595,66 @@ body:has(.inbox-shell) .inbox-shell { flex: 1; min-height: 0; height: auto; }
     color: #991b1b;
     cursor: pointer;
 }
+
+/* ── Cronología estilo chat (v0.1.76) ───────────────────────────────────── */
+.chat-thread {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 4px 4px;
+}
+
+.chat-bubble-row {
+    display: flex;
+}
+.chat-bubble-row.is-in  { justify-content: flex-start; }
+.chat-bubble-row.is-out { justify-content: flex-end; }
+
+.chat-bubble {
+    max-width: 82%;
+    border-radius: 14px;
+    padding: 8px 13px 9px;
+    font-size: .855rem;
+    line-height: 1.45;
+    position: relative;
+}
+.chat-bubble.is-in {
+    background: #f1f5f9;
+    border-top-left-radius: 4px;
+    color: #1e293b;
+}
+.chat-bubble.is-out {
+    background: #dbeafe;
+    border-top-right-radius: 4px;
+    color: #1e3a5f;
+}
+
+.chat-meta {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+.chat-sender {
+    font-weight: 600;
+    font-size: .78rem;
+    color: inherit;
+    opacity: .85;
+}
+.chat-time {
+    font-size: .72rem;
+    opacity: .6;
+    white-space: nowrap;
+}
+.chat-attach-icon {
+    font-size: .78rem;
+    opacity: .75;
+}
+.chat-body {
+    margin: 0;
+    white-space: pre-line;
+    word-break: break-word;
+    color: inherit;
+    opacity: .92;
+}

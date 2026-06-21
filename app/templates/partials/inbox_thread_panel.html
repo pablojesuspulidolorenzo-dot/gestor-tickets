@@ -345,28 +345,25 @@
     <!-- ══ VISTA CRONOLOGÍA ═══════════════════════════════════════════ -->
     <div x-show="view === 'timeline'" style="display:none;" class="inbox-synthesis-view">
 
-        <section class="inbox-panel-section">
-            <h3 class="inbox-section-title">Cronología del hilo</h3>
+        <section class="inbox-panel-section" style="padding-bottom:8px;">
             {% if messages %}
+            <div class="chat-thread">
             {% for msg in messages %}
-            <div class="timeline-item">
-                <div class="timeline-title">{{ msg.subject or "(Sin asunto)" }}</div>
-                <div class="timeline-meta">
-                    {{ (msg.sent_at | string)[:16] if msg.sent_at else "Sin fecha" }}
-                    · {{ msg.from_name or msg.from_email or "?" }}
-                    {% if msg.direction %}
-                    <span class="inbox-dir-badge {{ 'is-in' if msg.direction == 'inbound' else 'is-out' }}">
-                        {{ "Recibido" if msg.direction == "inbound" else "Enviado" }}
-                    </span>
+            {% set is_out = msg.direction == 'outbound' %}
+            <div class="chat-bubble-row {{ 'is-out' if is_out else 'is-in' }}">
+                <div class="chat-bubble {{ 'is-out' if is_out else 'is-in' }}">
+                    <div class="chat-meta">
+                        <span class="chat-sender">{{ msg.from_name or msg.from_email or "?" }}</span>
+                        <span class="chat-time">{{ (msg.sent_at | string)[5:16] | replace("T"," ") if msg.sent_at else "" }}</span>
+                        {% if msg.has_attachments %}<span class="chat-attach-icon" title="Tiene adjuntos">📎</span>{% endif %}
+                    </div>
+                    {% if msg.body_text_preview %}
+                    <p class="chat-body">{{ msg.body_text_preview[:280] }}{% if msg.body_text_preview|length > 280 %}…{% endif %}</p>
                     {% endif %}
                 </div>
-                {% if msg.body_text_preview %}
-                <p class="pane-empty-text" style="margin-top:4px;">
-                    {{ msg.body_text_preview[:200] }}{% if msg.body_text_preview|length > 200 %}…{% endif %}
-                </p>
-                {% endif %}
             </div>
             {% endfor %}
+            </div>
             {% else %}
             <p class="pane-empty-text">Este hilo no tiene correos archivados.</p>
             {% endif %}
