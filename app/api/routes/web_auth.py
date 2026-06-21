@@ -2414,6 +2414,7 @@ def email_viewer_panel(
     tipo = (ai_result or {}).get("tipo_correo", "")
     prior = (ai_result or {}).get("prioridad_sugerida", "")
     accion = (ai_result or {}).get("accion_sugerida", "")
+    body_clean = str((ai_result or {}).get("body_new") or "").strip()
 
     dir_class = "is-in" if row["direction"] == "inbound" else "is-out"
     dir_label = "Recibido" if row["direction"] == "inbound" else "Enviado"
@@ -2562,7 +2563,29 @@ def email_viewer_panel(
             f'</div>'
         )
 
+    import html as _hl
+    clean_toggle_btn = ""
+    clean_body_section = ""
+    alpine_scope_open = ""
+    alpine_scope_close = ""
+    if body_clean:
+        clean_safe = _hl.escape(body_clean)
+        clean_toggle_btn = (
+            '<button class="inbox-viewer-clean-toggle" '
+            '@click="showClean = !showClean" '
+            'x-text="showClean ? \'Ver original\' : \'Ver texto limpio ✦\'">'
+            'Ver texto limpio ✦</button>'
+        )
+        clean_body_section = (
+            f'<div class="inbox-viewer-body inbox-viewer-clean-body" x-show="showClean" x-cloak>'
+            f'<pre class="inbox-clean-pre">{clean_safe}</pre>'
+            f'</div>'
+        )
+        alpine_scope_open = '<div x-data="{ showClean: false }">'
+        alpine_scope_close = '</div>'
+
     html_out = f"""
+{alpine_scope_open}
 <div class="inbox-viewer-meta">
     {action_menu_html}
     <div class="inbox-viewer-subject">{subject_safe}</div>
@@ -2570,13 +2593,16 @@ def email_viewer_panel(
         <span class="inbox-dir-badge {dir_class}">{dir_label}</span>
         <span class="inbox-viewer-from">De: {from_safe}</span>
         <span class="inbox-viewer-date">{sent_at}</span>
+        {clean_toggle_btn}
     </div>
     {f'<div class="inbox-viewer-ai-row">{ai_tags_html}</div>' if ai_tags_html else ''}
 </div>
 {att_bar_html}
-<div class="inbox-viewer-body">
+<div class="inbox-viewer-body" {'x-show="!showClean"' if body_clean else ''}>
     {body_section}
 </div>
+{clean_body_section}
+{alpine_scope_close}
 """
     return HTMLResponse(html_out)
 
