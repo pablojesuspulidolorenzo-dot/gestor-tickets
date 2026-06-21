@@ -1106,51 +1106,73 @@ body:has(.inbox-shell) .inbox-shell { flex: 1; min-height: 0; height: auto; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   FILTROS DE BANDEJA
+   SIDEBAR HEADER COMPACTO CON TABS DE FILTRO
    ═══════════════════════════════════════════════════════════════════ */
 
+/* Convertir a flex-column eliminando el layout horizontal original */
+.inbox-sidebar-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
+    border-bottom: none;
+}
+
+/* Fila superior: título + badge + botón ASISTENCIA */
 .inbox-sidebar-header-top {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 14px 14px 6px;
+    gap: 7px;
+    padding: 9px 12px 8px;
 }
 .inbox-sidebar-title {
-    font-size: .95rem;
-    font-weight: 700;
-    color: #1e293b;
+    font-size: .88rem;
+    font-weight: 800;
+    color: #0f172a;
     margin: 0;
     flex: 1;
+    min-width: 0;
 }
+
+/* Barra de tabs: una sola fila scrollable con indicador underline */
 .inbox-filter-bar {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 6px 10px 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 0 4px;
+    gap: 0;
+    border-top: 1px solid #f1f5f9;
     border-bottom: 1px solid #e2e8f0;
+    background: #fff;
 }
+.inbox-filter-bar::-webkit-scrollbar { display: none; }
+
+/* Tab individual: texto + underline activo, sin bordes ni fondo */
 .inbox-filter-pill {
-    font-size: .72rem;
+    font-size: .7rem;
     font-weight: 500;
-    padding: 3px 9px;
-    border-radius: 99px;
-    border: 1px solid #cbd5e1;
-    background: #f8fafc;
-    color: #475569;
+    padding: 6px 10px 5px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: #94a3b8;
     cursor: pointer;
-    transition: background .12s, color .12s, border-color .12s;
     white-space: nowrap;
+    flex-shrink: 0;
+    margin-bottom: -1px;
+    transition: color .15s, border-color .15s;
 }
 .inbox-filter-pill:hover {
-    background: #e2e8f0;
-    border-color: #94a3b8;
-    color: #1e293b;
+    color: #334155;
+    background: transparent;
 }
 .inbox-filter-pill.is-active {
-    background: #1e40af;
-    border-color: #1e40af;
-    color: #fff;
-    font-weight: 600;
+    color: #1d4ed8;
+    font-weight: 700;
+    border-bottom-color: #2563eb;
+    background: transparent;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

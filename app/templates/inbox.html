@@ -41,7 +41,7 @@
                     ('account',  '→ Cuenta'),
                     ('active',   'Activos'),
                     ('all',      'Todos'),
-                    ('waiting',  '⏳ Espera'),
+                    ('waiting',  '⏳'),
                 ] %}
                 {% for fkey, flabel in filters %}
                 <button class="inbox-filter-pill"
@@ -49,7 +49,8 @@
                         @click="activeFilter = '{{ fkey }}'"
                         hx-get="/inbox/threads?filter={{ fkey }}"
                         hx-target="#inbox-thread-list"
-                        hx-swap="innerHTML">{{ flabel }}</button>
+                        hx-swap="innerHTML"
+                        {% if fkey == 'waiting' %}title="En espera"{% endif %}>{{ flabel }}</button>
                 {% endfor %}
             </div>
         </div>
