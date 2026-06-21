@@ -32,13 +32,58 @@ def _get_email_data(db: Session, email_message_id: int) -> dict | None:
     row = db.execute(
         text("""
             SELECT id, subject, from_email, from_name, sent_at, received_at,
-                   body_text_preview, direction, account_id
+                   body_text_preview, direction, account_id, eml_storage_path
             FROM gestor_tickets.email_messages
             WHERE id = :id
         """),
         {"id": email_message_id},
     ).mappings().first()
     return dict(row) if row else None
+
+
+def _extract_full_body_from_eml(eml_path: str | None) -> str:
+    """Lee el .eml archivado y devuelve el cuerpo en texto plano (máx. 6000 chars)."""
+    if not eml_path:
+        return ""
+    import email as _em
+    import re as _re
+    from email.policy import default as _pol
+    from pathlib import Path
+
+    try:
+        raw = Path(eml_path).read_bytes()
+        parsed = _em.message_from_bytes(raw, policy=_pol)
+    except Exception:
+        return ""
+
+    text_parts: list[str] = []
+    html_parts: list[str] = []
+    for part in parsed.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        if (part.get_content_disposition() or "").lower() == "attachment":
+            continue
+        ct = part.get_content_type()
+        try:
+            payload = part.get_payload(decode=True)
+            if not payload:
+                continue
+            charset = part.get_content_charset() or "utf-8"
+            text = payload.decode(charset, errors="replace")
+        except Exception:
+            continue
+        if ct == "text/plain":
+            text_parts.append(text)
+        elif ct == "text/html":
+            html_parts.append(text)
+
+    if text_parts:
+        return "\n\n".join(text_parts).strip()[:6000]
+    if html_parts:
+        stripped = _re.sub(r"<[^>]+>", " ", "\n".join(html_parts))
+        stripped = _re.sub(r"\s+", " ", stripped).strip()
+        return stripped[:6000]
+    return ""
 
 
 def _get_account_email(db: Session, account_id: int) -> str:
@@ -382,6 +427,81 @@ def _save_processing_error(db: Session, record_id: int, error_message: str) -> N
     db.commit()
 
 
+def _save_body_clean(
+    db: Session,
+    record_id: int,
+    body_clean: str,
+    tiene_contenido_nuevo: bool,
+) -> None:
+    db.execute(
+        text("""
+            UPDATE gestor_tickets.email_ai_processing SET
+                body_new            = :body_new,
+                body_new_found      = :body_new_found,
+                body_new_is_too_short = :too_short,
+                updated_at          = now()
+            WHERE id = :record_id
+        """),
+        {
+            "record_id": record_id,
+            "body_new": body_clean,
+            "body_new_found": tiene_contenido_nuevo,
+            "too_short": len(body_clean.strip()) < 20,
+        },
+    )
+    db.commit()
+
+
+def _run_cleaning_step(
+    db: Session,
+    *,
+    record_id: int,
+    email_message_id: int,
+    account_id: int,
+    user_id: int | None,
+    body_raw: str,
+) -> tuple[str, dict | None]:
+    """
+    Ejecuta el preprocesado IA de limpieza del cuerpo del correo (Contrato 0).
+    Devuelve (body_clean, firma_contacto).
+    Si el prompt no está configurado o la llamada falla, devuelve el body raw truncado.
+    """
+    active_version = get_active_version(db, "email_cleaning")
+    if not active_version:
+        return (body_raw or "")[:3000], None
+
+    user_content: dict = {
+        "email_message_id": email_message_id,
+        "body_raw": (body_raw or "")[:6000],
+    }
+
+    try:
+        parsed, _call_id = call_with_fallback(
+            db,
+            scope="email",
+            system_prompt=active_version["system_prompt_template"],
+            user_content_json=user_content,
+            account_id=account_id,
+            user_id=user_id,
+            call_purpose="email_cleaning",
+            related_email_id=email_message_id,
+            prompt_version_id=int(active_version["id"]),
+        )
+    except AICallError:
+        return (body_raw or "")[:3000], None
+
+    body_clean = str(parsed.get("body_clean") or "").strip()
+    firma = parsed.get("firma_contacto") if isinstance(parsed.get("firma_contacto"), dict) else None
+    tiene_nuevo = bool(parsed.get("tiene_contenido_nuevo", True))
+
+    # Fallback: si el LLM retornó vacío pero declaró que hay contenido nuevo
+    if not body_clean and tiene_nuevo:
+        body_clean = (body_raw or "")[:3000]
+
+    _save_body_clean(db, record_id, body_clean, tiene_nuevo)
+    return body_clean, firma
+
+
 def _process_detected_contacts(
     db: Session,
     *,
@@ -472,13 +592,42 @@ def process_email(
         if from_email else None
     )
 
-    # Construir payload para el LLM (Contrato A v2)
+    # ── Contrato 0: limpieza del cuerpo ──────────────────────────────────────
+    # Lee el body completo del .eml; si no está disponible cae al preview truncado.
+    body_raw = _extract_full_body_from_eml(email.get("eml_storage_path") or "")
+    if not body_raw:
+        body_raw = email.get("body_text_preview") or ""
+
+    body_clean, firma_contacto = _run_cleaning_step(
+        db,
+        record_id=record_id,
+        email_message_id=email_message_id,
+        account_id=account_id,
+        user_id=user_id,
+        body_raw=body_raw,
+    )
+    # Usar el body limpio como entrada del análisis; si quedó vacío, fallback al raw
+    body_for_analysis = body_clean.strip() if body_clean.strip() else body_raw[:3000]
+
+    # Añadir a known_sender el contacto extraído de la firma si no hay entrada en libreta
+    if firma_contacto and not known_sender:
+        known_sender = {
+            "found_in_contacts": False,
+            "name": firma_contacto.get("nombre"),
+            "phone": firma_contacto.get("telefono"),
+            "company": firma_contacto.get("empresa"),
+            "cargo": firma_contacto.get("cargo"),
+            "email_alternativo": firma_contacto.get("email_alternativo"),
+            "source": "firma_correo",
+        }
+
+    # ── Contrato A v2: análisis individual ──────────────────────────────────
     user_content: dict = {
         "email_id": email_message_id,
         "from": f"{email.get('from_name') or ''} <{from_email}>".strip(" <>"),
         "subject": email.get("subject") or "",
         "date": str(email.get("sent_at") or email.get("received_at") or ""),
-        "body_text": (email.get("body_text_preview") or "")[:3000],
+        "body_text": body_for_analysis[:3000],
         "addressing": {
             "to_account": addressing["to_account"],
             "to_users_direct": addressing["to_users_direct"],
@@ -518,9 +667,39 @@ def process_email(
         parsed["urgencia_atencion"] = "normal"
 
     # Persistir contactos detectados en la libreta
+    # Incluir el contacto de la firma si el análisis no lo detectó ya
     contactos = parsed.get("contactos_detectados")
-    if isinstance(contactos, list):
+    if not isinstance(contactos, list):
+        contactos = []
+    if firma_contacto and firma_contacto.get("email_alternativo"):
+        # Añadir el contacto de la firma si tiene al menos email alternativo
+        firma_entry = {
+            "nombre": firma_contacto.get("nombre") or "",
+            "email": firma_contacto.get("email_alternativo") or "",
+            "telefono": firma_contacto.get("telefono") or "",
+            "empresa": firma_contacto.get("empresa") or "",
+            "rol_en_hilo": "participante_activo",
+        }
+        if not any(str(c.get("email") or "").lower() == str(firma_entry["email"]).lower()
+                   for c in contactos if isinstance(c, dict)):
+            contactos.append(firma_entry)
+    if contactos:
         _process_detected_contacts(db, account_id=account_id, contactos=contactos)
+
+    # Si el remitente tiene teléfono en firma, persistirlo también aunque no tenga email alt.
+    if firma_contacto and firma_contacto.get("telefono") and from_email:
+        try:
+            upsert_contact(
+                db,
+                account_id=account_id,
+                email=from_email,
+                name=firma_contacto.get("nombre") or email.get("from_name") or None,
+                phone=firma_contacto.get("telefono"),
+                company=firma_contacto.get("empresa") or None,
+                source="ai_detected",
+            )
+        except Exception:
+            pass
 
     _save_processing_result(db, record_id, call_id, parsed, addressing["destinatario_tipo"])
     # Devolver el registro guardado en BD (claves consistentes con get_email_ai_result)

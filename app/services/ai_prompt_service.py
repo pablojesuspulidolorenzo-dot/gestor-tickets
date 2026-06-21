@@ -159,7 +159,69 @@ _USER_PROMPT_THREAD = """\
   "known_participants": []
 }"""
 
+_SYSTEM_EMAIL_CLEANING = """\
+Eres un preprocesador especializado en correos electrónicos de soporte. Tu tarea es extraer \
+únicamente el contenido nuevo y útil de un correo, eliminando el ruido habitual.
+
+ELIMINA sin excepción:
+1. Histórico citado del hilo de respuesta (líneas con >, bloque "-----Mensaje original-----", \
+"El día X, Y escribió:", cabeceras "From: ... Sent: ... To: ... Subject: ...", etc.)
+2. Avisos legales y de confidencialidad ("Este mensaje es confidencial", "AVISO LEGAL", \
+"DISCLAIMER", "La información contenida en este correo", "Si ha recibido este mensaje por error...", etc.)
+3. Firmas corporativas o gráficas sin valor informativo (logos en texto, líneas de separación \
+----, ====, ****; pie de empresa repetitivo sin datos de contacto nuevos)
+4. Publicidad o texto promocional del proveedor de correo
+
+CONSERVA siempre:
+1. Todo el contenido nuevo del remitente: descripción del problema, solicitud, respuesta, \
+datos técnicos, instrucciones, preguntas, aclaraciones.
+2. Los datos de contacto personales del firmante: nombre, teléfono, email alternativo, empresa, cargo.
+
+REGLAS ESTRICTAS:
+1. Responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido.
+2. NO incluyas bloques de código markdown (```json).
+3. NO añadas explicaciones ni texto fuera del JSON.
+4. Mantén el idioma original del contenido conservado.
+5. Si todo el correo es histórico citado o firma legal sin contenido nuevo, body_clean = "".
+
+ESQUEMA JSON DE RESPUESTA OBLIGATORIO:
+{
+  "body_clean": "Texto nuevo y útil del correo, sin histórico citado ni firma legal.",
+  "firma_contacto": {
+    "nombre": "Nombre completo del firmante o null",
+    "telefono": "+34 600 000 000 o null",
+    "email_alternativo": "correo@alt.com o null (solo si difiere del remitente)",
+    "empresa": "Nombre de la empresa o null",
+    "cargo": "Cargo del firmante o null"
+  },
+  "tiene_contenido_nuevo": true,
+  "porcentaje_ruido_estimado": 35
+}
+
+NOTAS:
+- "firma_contacto": usa null en cada campo si no se detecta ese dato.
+- "tiene_contenido_nuevo": false solo si el correo es únicamente histórico/firma/acuse vacío.
+- "porcentaje_ruido_estimado": 0-100, estimación de qué porcentaje del texto original era ruido."""
+
+_USER_PROMPT_EMAIL_CLEANING = """\
+{
+  "email_message_id": "<id numérico>",
+  "body_raw": "<texto completo del correo incluyendo firma y citas heredadas>"
+}"""
+
 _DEFAULT_TEMPLATES = [
+    {
+        "key": "email_cleaning",
+        "name": "Preprocesado de correo (limpieza)",
+        "description": (
+            "Extrae el contenido nuevo y útil de un correo eliminando histórico citado, "
+            "firmas legales y avisos de confidencialidad. Conserva los datos de contacto "
+            "del firmante. El texto limpio se usa como entrada para el análisis individual."
+        ),
+        "category": "email",
+        "system_prompt": _SYSTEM_EMAIL_CLEANING,
+        "user_prompt": _USER_PROMPT_EMAIL_CLEANING,
+    },
     {
         "key": "email_analysis",
         "name": "Análisis de correo individual",
