@@ -484,7 +484,9 @@ def list_thread_messages(
                 em.sent_at,
                 em.original_imap_folder,
                 em.original_imap_uid,
-                em.body_text_preview
+                em.body_text_preview,
+                em.has_attachments,
+                em.eml_storage_path
             FROM gestor_tickets.email_thread_members etm
             JOIN gestor_tickets.email_messages em
               ON em.id = etm.email_message_id

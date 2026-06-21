@@ -45,6 +45,17 @@
             {% if glpi_tickets %}<span class="inbox-tab-count">{{ glpi_tickets|length }}</span>{% endif %}
         </button>
 
+        {% if thread_has_attachments %}
+        <button class="inbox-view-tab" :class="{ 'is-active': view === 'attachments' }"
+                @click="view = 'attachments'"
+                hx-get="/threads/{{ thread.id }}/attachments-panel"
+                hx-target="#inbox-attachments-content"
+                hx-trigger="click once"
+                hx-swap="innerHTML">
+            Adjuntos
+        </button>
+        {% endif %}
+
         <button class="inbox-view-tab" :class="{ 'is-active': view === 'emails' }"
                 @click="view = 'emails'; selectedEmailId = selectedEmailId || {{ (messages | last).email_message_id if messages else 'null' }}">
             Correos
@@ -55,27 +66,6 @@
 
     <!-- ══ VISTA SÍNTESIS IA ══════════════════════════════════════════ -->
     <div x-show="view === 'synthesis'" class="inbox-synthesis-view">
-
-        <!-- Explorador de adjuntos -->
-        {% if thread_attachments %}
-        <section class="inbox-panel-section">
-            <h3 class="inbox-section-title">Adjuntos del hilo ({{ thread_attachments|length }})</h3>
-            <div class="inbox-attachments-list">
-                {% for att in thread_attachments %}
-                <div class="inbox-attachment-item">
-                    <span class="inbox-att-icon">📎</span>
-                    <div class="inbox-att-info">
-                        <span class="inbox-att-name">{{ att.filename or "Sin nombre" }}</span>
-                        <span class="inbox-att-meta">
-                            {{ att.content_type or "?" }}
-                            {% if att.size_bytes %} · {{ (att.size_bytes / 1024)|round(1) }} KB{% endif %}
-                        </span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </section>
-        {% endif %}
 
         <!-- Síntesis IA del hilo -->
         <section class="inbox-panel-section">
@@ -277,6 +267,18 @@
         </section>
 
     </div><!-- /vista glpi -->
+
+    <!-- ══ VISTA ADJUNTOS ════════════════════════════════════════════ -->
+    {% if thread_has_attachments %}
+    <div x-show="view === 'attachments'" style="display:none;" class="inbox-synthesis-view">
+        <section class="inbox-panel-section">
+            <h3 class="inbox-section-title">Adjuntos del hilo</h3>
+            <div id="inbox-attachments-content">
+                <p class="pane-empty-text">Cargando adjuntos…</p>
+            </div>
+        </section>
+    </div>
+    {% endif %}
 
     <!-- ══ VISTA CORREOS REALES ═══════════════════════════════════════ -->
     <!-- La lista de correos está en <aside id="inbox-email-list-sidebar"> (inbox.html) -->

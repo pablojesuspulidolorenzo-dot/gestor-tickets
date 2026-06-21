@@ -923,6 +923,26 @@ body:has(.inbox-shell) .inbox-shell { flex: 1; min-height: 0; height: auto; }
 .inbox-email-menu-item--danger:hover { background: #fef2f2; color: #b91c1c; }
 .inbox-email-menu-divider { border: none; border-top: 1px solid var(--border); margin: 3px 0; }
 
+/* ── Barra de adjuntos en el visor de correo individual ──────────── */
+.inbox-viewer-att-bar { flex-shrink: 0; padding: 8px 14px; background: #f1f5f9; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.inbox-viewer-att-label { font-size: .75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }
+.inbox-viewer-att-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.inbox-eml-att-chip { display: flex; align-items: center; gap: 6px; padding: 5px 10px; background: #fff; border: 1px solid var(--border); border-radius: 10px; max-width: 280px; min-width: 0; }
+.inbox-eml-att-icon { font-size: 1rem; flex-shrink: 0; }
+.inbox-eml-att-name { font-size: .8rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.inbox-eml-att-meta { font-size: .72rem; color: var(--text-muted); flex-shrink: 0; white-space: nowrap; }
+.inbox-eml-att-dl { flex-shrink: 0; display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px; border-radius: 7px; background: #eff6ff; border: 1px solid #bfdbfe; color: var(--primary-dark); font-size: .75rem; font-weight: 600; text-decoration: none; transition: background .1s; cursor: pointer; }
+.inbox-eml-att-dl:hover { background: #dbeafe; }
+
+/* ── Tarjetas de adjuntos en pestaña del hilo ────────────────────── */
+.inbox-att-card-list { display: flex; flex-direction: column; gap: 8px; }
+.inbox-att-card { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
+.inbox-att-type-icon { font-size: 1.3rem; flex-shrink: 0; }
+.inbox-att-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.inbox-att-origin { font-size: .72rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inbox-att-dl-btn { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 8px; background: #eff6ff; border: 1px solid #bfdbfe; color: var(--primary-dark); font-size: .8rem; font-weight: 600; text-decoration: none; transition: background .12s; cursor: pointer; }
+.inbox-att-dl-btn:hover { background: #dbeafe; }
+
 /* Badges de dirección */
 .inbox-dir-badge { display: inline-flex; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; margin-left: 4px; }
 .inbox-dir-badge.is-in { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }

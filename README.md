@@ -7,7 +7,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 ## Estado Actual
 
 - Ruta del proyecto en servidor: `/var/www/vhosts/gestor-tickets.es/docker/`
-- Version actual de la app: `0.1.64`
+- Version actual de la app: `0.1.67`
 - Stack: FastAPI, Jinja2, HTMX, PostgreSQL 17, GLPI, MariaDB, IMAP, Docker Compose
 - Esquema PostgreSQL principal: `gestor_tickets`
 - Archivo SQL de referencia: `gestor_tickets_v2_schema_postgresql17_sin_triggers.sql`
@@ -26,6 +26,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 - v0.1.60: auto-selección del correo más reciente al abrir "Correos reales"; menú ⋮ ampliado con Responder/Responder a todos/Reenviar (mailto:), Ignorar en este hilo y Eliminar del hilo (rojo); nuevos endpoints POST ignore-email y remove-email.
 - v0.1.61: panel de síntesis dividido en 4 pestañas independientes: Síntesis IA, Cronología (con contador), Tickets GLPI (con contador), Correos reales; header del hilo visible en todas las vistas excepto correos.
 - v0.1.62: panel de redacción integrado para Responder/Responder a todos/Reenviar; campos editables Para, CC, CCO (toggle), Asunto, cuerpo con cita original; adjuntar archivos múltiples; envío real vía SMTP (derivado del host IMAP); servicio smtp_service.py nuevo.
+- v0.1.67: adjuntos estilo Outlook — barra de adjuntos en el visor de cada correo con icono por tipo, tamaño y botón ⬇ Descargar (extrae del .eml en tiempo real); nueva pestaña "Adjuntos" en el panel de hilo (solo visible si hay correos con adjuntos, carga lazy HTMX al clic); endpoint seguro /api/emails/{id}/attachments/download?idx={n}.
 - v0.1.66: pestañas "Sugerencias" y "Participantes" en el panel de hilo — acciones IA convertidas en botones funcionales (crear ticket GLPI inline, ir a correos, ver GLPI, ver participantes, descartar) con trazabilidad en ai_action_executions; participantes con "Guardar en libreta" y "Enviar correo"; live-poll actualiza también los nuevos contenedores vía OOB swap.
 - v0.1.65: live-polling del panel de hilo cada 60 s con cero parpadeo — servidor devuelve 204 si nada cambió (HTMX no modifica el DOM); OOB swap selectivo solo si la síntesis IA tiene nuevo synthesized_at o el count de correos del hilo cambió; mantiene selección del correo activo, scroll y estado de Alpine.js intactos.
 - v0.1.64: botón "Reprocesar hilo ↺" en pestaña Síntesis IA — fuerza reprocesado IA de todos los correos del hilo en orden cronológico y regenera la síntesis; muestra resumen del proceso (N analizados, errores, total).

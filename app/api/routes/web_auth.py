@@ -535,6 +535,7 @@ def inbox_page(
     glpi_tickets = []
     ai_thread_result = None
 
+    thread_has_attachments = False
     if thread_id:
         try:
             selected_thread, thread_messages = get_thread_detail(
@@ -545,6 +546,7 @@ def inbox_page(
             )
             ai_thread_result = get_thread_ai_synthesis(db, thread_id)
             thread_attachments = _get_thread_attachments(db, account_id=account_id, thread_id=thread_id)
+            thread_has_attachments = any(m.get("has_attachments") for m in thread_messages)
         except ValueError:
             pass
 
@@ -563,6 +565,7 @@ def inbox_page(
             selected_thread=selected_thread,
             thread_messages=thread_messages,
             thread_attachments=thread_attachments,
+            thread_has_attachments=thread_has_attachments,
             glpi_tickets=glpi_tickets,
             ai_thread_result=ai_thread_result,
             thread_id=thread_id,
@@ -629,6 +632,7 @@ def inbox_thread_panel(
         glpi_tickets = list_glpi_tickets_for_thread(db, account_id=account_id, thread_id=thread_id)
         ai_thread_result = get_thread_ai_synthesis(db, thread_id)
         thread_attachments = _get_thread_attachments(db, account_id=account_id, thread_id=thread_id)
+        thread_has_attachments = any(m.get("has_attachments") for m in messages)
         all_threads = list_system_threads(db, account_id=account_id)
     except ValueError:
         return HTMLResponse("<p class='pane-empty-text'>Hilo no encontrado.</p>")
@@ -642,6 +646,7 @@ def inbox_thread_panel(
             thread=thread,
             messages=messages,
             thread_attachments=thread_attachments,
+            thread_has_attachments=thread_has_attachments,
             glpi_tickets=glpi_tickets,
             ai_thread_result=ai_thread_result,
             threads=all_threads,
@@ -649,6 +654,68 @@ def inbox_thread_panel(
             include_email_sidebar_oob=True,
         ),
     )
+
+
+def _extract_eml_attachments(eml_path: str) -> list[dict]:
+    """Extrae metadatos de adjuntos no-inline de un .eml. Devuelve lista con idx, filename, content_type, size_bytes."""
+    import email as _em
+    from email.policy import default as _pol
+    from email.header import decode_header as _dh
+    from pathlib import Path
+
+    try:
+        raw = Path(eml_path).read_bytes()
+        parsed = _em.message_from_bytes(raw, policy=_pol)
+    except Exception:
+        return []
+
+    attachments: list[dict] = []
+    idx = 0
+    for part in parsed.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        disposition = (part.get_content_disposition() or "").lower()
+        fname = part.get_filename()
+        if fname:
+            try:
+                decoded = _dh(fname)
+                fname = "".join(
+                    (b.decode(enc or "utf-8", errors="replace") if isinstance(b, bytes) else b)
+                    for b, enc in decoded
+                )
+            except Exception:
+                pass
+        if disposition == "attachment" or (fname and disposition != "inline" and part.get_content_maintype() not in ("text", "multipart")):
+            payload = part.get_payload(decode=True)
+            attachments.append({
+                "idx": idx,
+                "filename": fname or f"adjunto_{idx}",
+                "content_type": part.get_content_type() or "application/octet-stream",
+                "size_bytes": len(payload) if payload else 0,
+            })
+        idx += 1
+    return attachments
+
+
+def _att_icon(content_type: str) -> str:
+    ct = (content_type or "").lower()
+    if ct.startswith("image/"): return "🖼"
+    if ct == "application/pdf": return "📑"
+    if ct.startswith("video/"): return "🎬"
+    if ct.startswith("audio/"): return "🎵"
+    if "zip" in ct or "compressed" in ct or "tar" in ct: return "🗜"
+    if ct.startswith("text/"): return "📝"
+    return "📎"
+
+
+def _fmt_size(size_bytes: int | None) -> str:
+    if not size_bytes:
+        return ""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 
 def _get_thread_attachments(db: Session, *, account_id: int, thread_id: int) -> list[dict]:
@@ -2338,6 +2405,11 @@ def email_viewer_panel(
     except Exception:
         pass
 
+    # Extraer adjuntos no-inline del .eml para mostrar barra de adjuntos
+    eml_attachments: list[dict] = []
+    if eml_path:
+        eml_attachments = _extract_eml_attachments(eml_path)
+
     ai_result = get_email_ai_result(db, email_message_id)
     tipo = (ai_result or {}).get("tipo_correo", "")
     prior = (ai_result or {}).get("prioridad_sugerida", "")
@@ -2462,6 +2534,34 @@ def email_viewer_panel(
             f'</div>'
         )
 
+    # Barra de adjuntos estilo Outlook
+    att_bar_html = ""
+    if eml_attachments:
+        items = ""
+        for att in eml_attachments:
+            import html as _html_mod
+            icon = _att_icon(att["content_type"])
+            fname = _html_mod.escape(att["filename"])
+            size_str = _fmt_size(att["size_bytes"])
+            ct_short = att["content_type"].split("/")[-1].upper() if "/" in att["content_type"] else att["content_type"].upper()
+            meta = f"{ct_short}{' · ' + size_str if size_str else ''}"
+            dl_url = f"/api/emails/{email_message_id}/attachments/download?idx={att['idx']}"
+            items += (
+                f'<div class="inbox-eml-att-chip">'
+                f'  <span class="inbox-eml-att-icon">{icon}</span>'
+                f'  <span class="inbox-eml-att-name" title="{fname}">{fname}</span>'
+                f'  <span class="inbox-eml-att-meta">{meta}</span>'
+                f'  <a class="inbox-eml-att-dl" href="{dl_url}" download="{fname}" title="Descargar">⬇</a>'
+                f'</div>'
+            )
+        count = len(eml_attachments)
+        att_bar_html = (
+            f'<div class="inbox-viewer-att-bar">'
+            f'  <span class="inbox-viewer-att-label">{count} adjunto{"s" if count != 1 else ""}</span>'
+            f'  <div class="inbox-viewer-att-chips">{items}</div>'
+            f'</div>'
+        )
+
     html_out = f"""
 <div class="inbox-viewer-meta">
     {action_menu_html}
@@ -2473,6 +2573,7 @@ def email_viewer_panel(
     </div>
     {f'<div class="inbox-viewer-ai-row">{ai_tags_html}</div>' if ai_tags_html else ''}
 </div>
+{att_bar_html}
 <div class="inbox-viewer-body">
     {body_section}
 </div>
@@ -2781,6 +2882,158 @@ def serve_inline_attachment(
 
     content_type = row["content_type"] or mimetypes.guess_type(path)[0] or "application/octet-stream"
     return FileResponse(path, media_type=content_type)
+
+
+@router.get("/api/emails/{email_message_id}/attachments/download")
+def download_email_attachment(
+    request: Request,
+    email_message_id: int,
+    idx: int,
+    db: Session = Depends(get_db),
+):
+    """Descarga un adjunto extraído en tiempo real del .eml archivado."""
+    import urllib.parse as _urlparse
+
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return Response(status_code=403)
+
+    row = db.execute(
+        text("""
+            SELECT eml_storage_path FROM gestor_tickets.email_messages
+            WHERE id = :id AND account_id = :account_id LIMIT 1
+        """),
+        {"id": email_message_id, "account_id": int(user["account_id"])},
+    ).mappings().first()
+
+    if not row or not row["eml_storage_path"]:
+        return Response(status_code=404)
+
+    import email as _em
+    from email.policy import default as _pol
+    from pathlib import Path
+
+    try:
+        raw = Path(row["eml_storage_path"]).read_bytes()
+        parsed = _em.message_from_bytes(raw, policy=_pol)
+    except Exception:
+        return Response(status_code=500)
+
+    part_idx = 0
+    target_part = None
+    for part in parsed.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        if part_idx == idx:
+            target_part = part
+            break
+        part_idx += 1
+
+    if target_part is None:
+        return Response(status_code=404)
+
+    payload = target_part.get_payload(decode=True)
+    if not payload:
+        return Response(status_code=404)
+
+    from email.header import decode_header as _dh
+    fname = target_part.get_filename() or f"adjunto_{idx}"
+    try:
+        decoded = _dh(fname)
+        fname = "".join(
+            (b.decode(enc or "utf-8", errors="replace") if isinstance(b, bytes) else b)
+            for b, enc in decoded
+        )
+    except Exception:
+        pass
+
+    content_type = target_part.get_content_type() or "application/octet-stream"
+    encoded_name = _urlparse.quote(fname, safe="")
+    return Response(
+        content=payload,
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{fname}"; filename*=UTF-8\'\'{encoded_name}',
+        },
+    )
+
+
+@router.get("/threads/{thread_id}/attachments-panel", response_class=HTMLResponse)
+def thread_attachments_panel(
+    request: Request,
+    thread_id: int,
+    db: Session = Depends(get_db),
+):
+    """Partial HTMX: panel de adjuntos del hilo, cargado bajo demanda al hacer clic en la pestaña."""
+    import html as _html
+
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return HTMLResponse('<p class="pane-empty-text">Sin sesión.</p>', status_code=403)
+
+    account_id = int(user["account_id"])
+
+    rows = db.execute(
+        text("""
+            SELECT em.id AS email_message_id, em.subject, em.from_name, em.from_email,
+                   em.sent_at, em.eml_storage_path
+            FROM gestor_tickets.email_thread_members etm
+            JOIN gestor_tickets.email_messages em ON em.id = etm.email_message_id
+            JOIN gestor_tickets.system_threads st ON st.id = etm.thread_id
+            WHERE etm.thread_id = :thread_id
+              AND st.account_id = :account_id
+              AND etm.status = 'active'
+              AND em.has_attachments = true
+            ORDER BY em.sent_at ASC NULLS LAST
+        """),
+        {"thread_id": thread_id, "account_id": account_id},
+    ).mappings().all()
+
+    all_atts: list[dict] = []
+    for email_row in rows:
+        if email_row["eml_storage_path"]:
+            atts = _extract_eml_attachments(email_row["eml_storage_path"])
+            sender = email_row["from_name"] or email_row["from_email"] or "?"
+            sent = str(email_row["sent_at"])[:16] if email_row["sent_at"] else ""
+            subj = email_row["subject"] or "(Sin asunto)"
+            for att in atts:
+                att["email_message_id"] = email_row["email_message_id"]
+                att["email_subject"] = subj
+                att["email_from"] = sender
+                att["sent_at"] = sent
+            all_atts.extend(atts)
+
+    if not all_atts:
+        return HTMLResponse('<p class="pane-empty-text" style="margin:16px;">No se encontraron adjuntos en este hilo.</p>')
+
+    items_html = ""
+    for att in all_atts:
+        icon = _att_icon(att["content_type"])
+        fname = _html.escape(att["filename"])
+        ct = _html.escape(att["content_type"])
+        size_str = _fmt_size(att["size_bytes"])
+        meta = f"{ct}{' · ' + size_str if size_str else ''}"
+        from_safe = _html.escape(att["email_from"])
+        sent_safe = _html.escape(att["sent_at"])
+        subj_safe = _html.escape(att["email_subject"])
+        eid = att["email_message_id"]
+        aidx = att["idx"]
+        download_url = f"/api/emails/{eid}/attachments/download?idx={aidx}"
+        items_html += (
+            f'<div class="inbox-att-card">'
+            f'  <span class="inbox-att-type-icon">{icon}</span>'
+            f'  <div class="inbox-att-card-info">'
+            f'    <span class="inbox-att-name">{fname}</span>'
+            f'    <span class="inbox-att-meta">{meta}</span>'
+            f'    <span class="inbox-att-origin">De: {from_safe} · {sent_safe} · {subj_safe}</span>'
+            f'  </div>'
+            f'  <a class="inbox-att-dl-btn" href="{download_url}" download="{fname}" title="Descargar {fname}">⬇ Descargar</a>'
+            f'</div>'
+        )
+
+    return HTMLResponse(
+        f'<div class="inbox-att-card-list">{items_html}</div>'
+    )
 
 
 @router.post("/threads/{thread_id}/fork-email/{email_message_id}", response_class=HTMLResponse)
