@@ -39,7 +39,10 @@ def get_thread_summary(db: Session, *, thread_id: int) -> dict | None:
                 st.status::text AS status,
                 count(etm.id)::int AS message_count,
                 max(em.sent_at) AS last_message_at,
-                st.updated_at
+                st.updated_at,
+                COALESCE(st.is_waiting, false) AS is_waiting,
+                st.waiting_until,
+                st.waiting_reason
             FROM gestor_tickets.system_threads st
             LEFT JOIN gestor_tickets.email_thread_members etm
               ON etm.thread_id = st.id

@@ -1,5 +1,7 @@
+import asyncio
 from app.services.mail_ingestion_scheduler import start_mail_ingestion_scheduler, stop_mail_ingestion_scheduler
 from app.services.ai_prompt_service import seed_default_templates
+from app.services.inbox_filter_service import ensure_migrations, reactivate_expired_waiting
 from app.core.db import SessionLocal
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -70,11 +72,28 @@ def htmx_ping():
     )
 
 
+async def _waiting_reactivation_loop() -> None:
+    while True:
+        await asyncio.sleep(300)
+        try:
+            with SessionLocal() as db:
+                n = reactivate_expired_waiting(db)
+                if n > 0:
+                    print(f"[waiting] {n} hilo(s) reactivados por vencimiento", flush=True)
+        except Exception as exc:
+            print(f"[waiting] error: {exc}", flush=True)
+
+
 @app.on_event("startup")
 async def _startup() -> None:
-    start_mail_ingestion_scheduler()
     with SessionLocal() as db:
+        try:
+            ensure_migrations(db)
+        except Exception as exc:
+            print(f"[startup] migraciones inbox: {exc}", flush=True)
         seed_default_templates(db)
+    start_mail_ingestion_scheduler()
+    asyncio.create_task(_waiting_reactivation_loop())
 
 
 @app.on_event("shutdown")

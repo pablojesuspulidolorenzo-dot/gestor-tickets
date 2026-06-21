@@ -1,5 +1,32 @@
 {% set glpi_status_map = {1: "Nuevo", 2: "En proceso", 3: "Planificado", 4: "Pendiente", 5: "Resuelto", 6: "Cerrado"} %}
 {% set glpi_priority_map = {1: "Muy baja", 2: "Baja", 3: "Media", 4: "Alta", 5: "Muy alta", 6: "Mayor"} %}
+{% set _op_mode = operator_mode | default(false) %}
+{% set _op_pending = operator_pending_count | default(0) %}
+
+<!-- Barra modo operador (solo en modo ASISTENCIA) -->
+{% if _op_mode %}
+<div class="inbox-operator-bar">
+    <div class="inbox-operator-info">
+        <span class="inbox-operator-icon">🎧</span>
+        <span class="inbox-operator-label">Modo Operador</span>
+        <span class="inbox-operator-queue">{{ _op_pending }} en cola</span>
+    </div>
+    <div class="inbox-operator-actions">
+        <button class="inbox-operator-next-btn"
+                hx-post="/inbox/operator/next"
+                hx-target="#inbox-panel"
+                hx-swap="innerHTML">
+            Siguiente →
+        </button>
+        <button class="inbox-operator-exit-btn"
+                hx-post="/inbox/operator/exit"
+                hx-target="#inbox-panel"
+                hx-swap="innerHTML">
+            ✕ Salir
+        </button>
+    </div>
+</div>
+{% endif %}
 
 <!-- Header: visible en todas las vistas excepto correos para no reducir el espacio del visor -->
 <div class="inbox-panel-header" x-show="view !== 'emails'" x-cloak>
@@ -14,7 +41,58 @@
     </div>
     <div class="inbox-panel-actions">
         <span class="glpi-status-badge glpi-st-{{ '5' if thread.status == 'active' else '6' }}">{{ thread.status }}</span>
+
+        <!-- Control de estado "En espera" -->
+        {% if thread.get('is_waiting') %}
+        <div class="inbox-waiting-active-wrap">
+            <span class="inbox-waiting-badge">
+                ⏳ En espera{% if thread.get('waiting_until') %} · {{ (thread.waiting_until | string)[:10] }}{% endif %}
+            </span>
+            <button class="inbox-waiting-reactivate-btn"
+                    hx-post="/threads/{{ thread.id }}/unset-waiting{% if _op_mode %}?op=1{% endif %}"
+                    hx-target="#inbox-panel"
+                    hx-swap="innerHTML">
+                Reactivar
+            </button>
+        </div>
+        {% else %}
+        <div x-data="{ showWaiting: false }">
+            <button class="inbox-waiting-btn"
+                    :class="{ 'is-open': showWaiting }"
+                    @click="showWaiting = !showWaiting"
+                    title="Marcar como En espera">⏳</button>
+            <div x-show="showWaiting" x-cloak class="inbox-waiting-form-wrap">
+                <form hx-post="/threads/{{ thread.id }}/set-waiting{% if _op_mode %}?op=1{% endif %}"
+                      hx-target="#inbox-panel"
+                      hx-swap="innerHTML"
+                      class="inbox-waiting-form">
+                    <label class="inbox-waiting-form-label">
+                        Motivo (opcional)
+                        <input type="text" name="reason" class="inbox-waiting-input"
+                               placeholder="Esperando respuesta del cliente…" maxlength="200">
+                    </label>
+                    <label class="inbox-waiting-form-label">
+                        Recordar el
+                        <input type="date" name="waiting_until" class="inbox-waiting-input">
+                    </label>
+                    <div class="inbox-waiting-form-btns">
+                        <button type="button" class="btn-sm-cancel" @click="showWaiting = false">Cancelar</button>
+                        <button type="submit" class="btn-sm-confirm">Poner en espera ⏳</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
     </div>
+</div>
+
+<!-- Barra de presencia colaborativa (auto-ping cada 30s) -->
+<div class="inbox-presence-bar" id="inbox-presence-outer" x-show="view !== 'emails'" x-cloak>
+    <div id="thread-presence-inner"
+         hx-post="/threads/{{ thread.id }}/presence/ping"
+         hx-trigger="load, every 30s"
+         hx-target="#thread-presence-inner"
+         hx-swap="innerHTML"></div>
 </div>
 
 <!-- Pestañas — 6 vistas; pills ultracompactos en modo correos -->

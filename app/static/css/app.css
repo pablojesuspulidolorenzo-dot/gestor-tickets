@@ -1104,3 +1104,314 @@ body:has(.inbox-shell) .inbox-shell { flex: 1; min-height: 0; height: auto; }
     color: #9a3412;
     margin-bottom: 10px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   FILTROS DE BANDEJA
+   ═══════════════════════════════════════════════════════════════════ */
+
+.inbox-sidebar-header-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 14px 6px;
+}
+.inbox-sidebar-title {
+    font-size: .95rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    flex: 1;
+}
+.inbox-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 10px 10px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.inbox-filter-pill {
+    font-size: .72rem;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 99px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+    white-space: nowrap;
+}
+.inbox-filter-pill:hover {
+    background: #e2e8f0;
+    border-color: #94a3b8;
+    color: #1e293b;
+}
+.inbox-filter-pill.is-active {
+    background: #1e40af;
+    border-color: #1e40af;
+    color: #fff;
+    font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BADGES EN FILAS DE HILO
+   ═══════════════════════════════════════════════════════════════════ */
+
+.inbox-thread-row-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 4px;
+}
+.inbox-others-dot {
+    font-size: .65rem;
+    color: #2563eb;
+    line-height: 1;
+}
+.inbox-waiting-dot {
+    font-size: .75rem;
+    line-height: 1;
+}
+.inbox-claimed-dot {
+    font-size: .65rem;
+    line-height: 1;
+    opacity: .7;
+}
+.inbox-dir-badge {
+    font-size: .65rem;
+    font-weight: 700;
+    border-radius: 3px;
+    padding: 0 3px;
+    line-height: 1.4;
+}
+.inbox-dir-badge.is-inbound  { background: #dcfce7; color: #15803d; }
+.inbox-dir-badge.is-outbound { background: #dbeafe; color: #1d4ed8; }
+
+.inbox-thread-row.is-waiting {
+    border-left: 3px solid #f59e0b;
+}
+.inbox-thread-row.is-claimed {
+    border-left: 3px solid #6366f1;
+}
+.inbox-thread-waiting-reason {
+    font-size: .72rem;
+    color: #92400e;
+    font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PRESENCIA COLABORATIVA
+   ═══════════════════════════════════════════════════════════════════ */
+
+.inbox-presence-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 16px;
+    min-height: 28px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+.inbox-presence-label {
+    font-size: .72rem;
+    color: #64748b;
+    white-space: nowrap;
+}
+.inbox-presence-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: .6rem;
+    font-weight: 700;
+    color: #fff;
+    cursor: default;
+    flex-shrink: 0;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.15);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ESTADO "EN ESPERA" EN PANEL DE HILO
+   ═══════════════════════════════════════════════════════════════════ */
+
+.inbox-waiting-active-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.inbox-waiting-badge {
+    font-size: .75rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 99px;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    color: #92400e;
+}
+.inbox-waiting-reactivate-btn {
+    font-size: .72rem;
+    padding: 3px 9px;
+    border-radius: 6px;
+    border: 1px solid #6366f1;
+    background: transparent;
+    color: #4338ca;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background .12s;
+}
+.inbox-waiting-reactivate-btn:hover { background: #eef2ff; }
+
+.inbox-waiting-btn {
+    font-size: .85rem;
+    padding: 3px 7px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: transparent;
+    cursor: pointer;
+    color: #64748b;
+    transition: border-color .12s, background .12s;
+}
+.inbox-waiting-btn:hover,
+.inbox-waiting-btn.is-open { border-color: #f59e0b; background: #fffbeb; color: #92400e; }
+
+.inbox-waiting-form-wrap {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 200;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    padding: 14px;
+    min-width: 260px;
+}
+.inbox-panel-actions { position: relative; }
+
+.inbox-waiting-form { display: flex; flex-direction: column; gap: 10px; }
+.inbox-waiting-form-label {
+    font-size: .78rem;
+    color: #374151;
+    font-weight: 500;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.inbox-waiting-input {
+    font-size: .8rem;
+    padding: 5px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.inbox-waiting-form-btns {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+.btn-sm-cancel {
+    font-size: .75rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: transparent;
+    cursor: pointer;
+    color: #6b7280;
+}
+.btn-sm-confirm {
+    font-size: .75rem;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: none;
+    background: #f59e0b;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .12s;
+}
+.btn-sm-confirm:hover { background: #d97706; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   MODO OPERADOR
+   ═══════════════════════════════════════════════════════════════════ */
+
+.inbox-operator-toggle-btn {
+    font-size: .72rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 99px;
+    border: 1.5px solid #6366f1;
+    background: transparent;
+    color: #4338ca;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .12s, color .12s;
+}
+.inbox-operator-toggle-btn:hover { background: #eef2ff; }
+.inbox-operator-toggle-btn.is-active {
+    background: #6366f1;
+    color: #fff;
+    border-color: #6366f1;
+}
+
+.inbox-operator-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: linear-gradient(90deg, #312e81 0%, #4338ca 100%);
+    color: #fff;
+    border-radius: 0;
+    flex-wrap: wrap;
+}
+.inbox-operator-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+.inbox-operator-icon { font-size: 1.1rem; }
+.inbox-operator-label {
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+.inbox-operator-queue {
+    font-size: .72rem;
+    background: rgba(255,255,255,.2);
+    padding: 2px 7px;
+    border-radius: 99px;
+}
+.inbox-operator-actions {
+    display: flex;
+    gap: 8px;
+}
+.inbox-operator-next-btn {
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 6px;
+    border: 1.5px solid rgba(255,255,255,.6);
+    background: rgba(255,255,255,.15);
+    color: #fff;
+    cursor: pointer;
+    transition: background .12s;
+}
+.inbox-operator-next-btn:hover { background: rgba(255,255,255,.28); }
+.inbox-operator-exit-btn {
+    font-size: .78rem;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1.5px solid rgba(255,255,255,.3);
+    background: transparent;
+    color: rgba(255,255,255,.8);
+    cursor: pointer;
+    transition: background .12s;
+}
+.inbox-operator-exit-btn:hover { background: rgba(255,0,0,.18); color: #fff; }

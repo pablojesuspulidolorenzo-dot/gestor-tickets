@@ -5,13 +5,53 @@
 {% block content %}
 {% include "partials/nav.html" %}
 
-<main class="inbox-shell" x-data="{ view: 'synthesis', selectedEmailId: null }" style="--sidebar-w: 340px">
+<main class="inbox-shell"
+      x-data="{
+        view: 'synthesis',
+        selectedEmailId: null,
+        operatorMode: false,
+        activeFilter: '{{ active_filter | default('pending') }}'
+      }"
+      x-on:operatormodechanged.window="operatorMode = $event.detail.active"
+      style="--sidebar-w: 340px">
 
     <!-- Columna izquierda A: listado de hilos (solo en modo Síntesis) -->
     <aside class="inbox-sidebar" x-show="view !== 'emails'" x-cloak>
         <div class="inbox-sidebar-header">
-            <h2 class="inbox-sidebar-title">Hilos</h2>
-            <span class="ticket-count-badge">{{ total_threads }}</span>
+            <div class="inbox-sidebar-header-top">
+                <h2 class="inbox-sidebar-title">Bandeja</h2>
+                <span class="ticket-count-badge">{{ total_threads }}</span>
+                <button class="inbox-operator-toggle-btn"
+                        :class="{ 'is-active': operatorMode }"
+                        title="Modo Operador — atiende hilos en cola de uno en uno"
+                        hx-post="/inbox/operator/start"
+                        hx-target="#inbox-panel"
+                        hx-swap="innerHTML"
+                        @click="operatorMode = true">
+                    🎧&nbsp;ASISTENCIA
+                </button>
+            </div>
+
+            <!-- Filtros rápidos de bandeja -->
+            <div class="inbox-filter-bar">
+                <input type="hidden" id="inbox-active-filter" :value="activeFilter">
+                {% set filters = [
+                    ('pending',  '📥 Pendientes'),
+                    ('personal', '→ Personal'),
+                    ('account',  '→ Cuenta'),
+                    ('active',   'Activos'),
+                    ('all',      'Todos'),
+                    ('waiting',  '⏳ Espera'),
+                ] %}
+                {% for fkey, flabel in filters %}
+                <button class="inbox-filter-pill"
+                        :class="{ 'is-active': activeFilter === '{{ fkey }}' }"
+                        @click="activeFilter = '{{ fkey }}'"
+                        hx-get="/inbox/threads?filter={{ fkey }}"
+                        hx-target="#inbox-thread-list"
+                        hx-swap="innerHTML">{{ flabel }}</button>
+                {% endfor %}
+            </div>
         </div>
 
         <div class="inbox-thread-list" id="inbox-thread-list">

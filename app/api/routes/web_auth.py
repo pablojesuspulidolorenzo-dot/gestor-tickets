@@ -66,6 +66,18 @@ from app.services.thread_service import (
     list_system_threads,
     merge_thread_into,
 )
+from app.services.inbox_filter_service import (
+    FILTER_LABELS,
+    claim_next_thread,
+    get_my_active_claim,
+    get_presence_others,
+    list_threads_filtered,
+    pending_unclaimed_count,
+    ping_presence,
+    release_operator_claim,
+    set_thread_waiting,
+    unset_thread_waiting,
+)
 from app.services.email_ai_processing_service import get_email_ai_result, process_email
 from app.services.thread_ai_synthesis_service import get_thread_ai_synthesis, synthesize_thread
 from app.services.mail_ingestion_service import reprocess_thread_ai
@@ -510,6 +522,7 @@ def inbox_page(
     request: Request,
     thread_id: int | None = None,
     page: int = 1,
+    filter: str = "pending",
     db: Session = Depends(get_db),
 ):
     user = require_session_user(request)
@@ -520,22 +533,23 @@ def inbox_page(
     if denied:
         return denied
 
-    page_size = 25
-    offset = (page - 1) * page_size
     account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+    page_size = 25
 
-    threads = list_system_threads(db, account_id=account_id)
-    total_threads = len(threads)
-    threads_page = threads[offset:offset + page_size]
-    has_more = (offset + page_size) < total_threads
+    threads, total_threads = list_threads_filtered(
+        db, account_id=account_id, user_id=user_id,
+        filter_key=filter, page=page, page_size=page_size,
+    )
+    has_more = (page * page_size) < total_threads
 
     selected_thread = None
     thread_messages = []
     thread_attachments = []
     glpi_tickets = []
     ai_thread_result = None
-
     thread_has_attachments = False
+
     if thread_id:
         try:
             selected_thread, thread_messages = get_thread_detail(
@@ -557,11 +571,13 @@ def inbox_page(
             request,
             user=user,
             active_section="inbox",
-            threads=threads_page,
+            threads=threads,
             total_threads=total_threads,
             page=page,
             page_size=page_size,
             has_more=has_more,
+            active_filter=filter,
+            filter_labels=FILTER_LABELS,
             selected_thread=selected_thread,
             thread_messages=thread_messages,
             thread_attachments=thread_attachments,
@@ -577,9 +593,10 @@ def inbox_page(
 def inbox_threads_partial(
     request: Request,
     page: int = 1,
+    filter: str = "pending",
     db: Session = Depends(get_db),
 ):
-    """Partial HTMX: carga más hilos para el scroll infinito."""
+    """Partial HTMX: carga hilos para el scroll infinito con filtro activo."""
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
@@ -588,24 +605,26 @@ def inbox_threads_partial(
     if denied:
         return denied
 
-    page_size = 25
-    offset = (page - 1) * page_size
     account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+    page_size = 25
 
-    threads = list_system_threads(db, account_id=account_id)
-    total_threads = len(threads)
-    threads_page = threads[offset:offset + page_size]
-    has_more = (offset + page_size) < total_threads
+    threads, total_threads = list_threads_filtered(
+        db, account_id=account_id, user_id=user_id,
+        filter_key=filter, page=page, page_size=page_size,
+    )
+    has_more = (page * page_size) < total_threads
 
     return templates.TemplateResponse(
         request=request,
         name="partials/inbox_thread_rows.html",
         context=_template_context(
             request,
-            threads=threads_page,
+            threads=threads,
             page=page,
             page_size=page_size,
             has_more=has_more,
+            active_filter=filter,
         ),
     )
 
@@ -614,6 +633,7 @@ def inbox_threads_partial(
 def inbox_thread_panel(
     request: Request,
     thread_id: int,
+    op: int = 0,
     db: Session = Depends(get_db),
 ):
     """Partial HTMX: carga el panel derecho del hilo seleccionado."""
@@ -626,6 +646,7 @@ def inbox_thread_panel(
         return denied
 
     account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
 
     try:
         thread, messages = get_thread_detail(db, account_id=account_id, thread_id=thread_id)
@@ -636,6 +657,9 @@ def inbox_thread_panel(
         all_threads = list_system_threads(db, account_id=account_id)
     except ValueError:
         return HTMLResponse("<p class='pane-empty-text'>Hilo no encontrado.</p>")
+
+    operator_mode = bool(op)
+    op_pending = pending_unclaimed_count(db, account_id=account_id) if operator_mode else None
 
     return templates.TemplateResponse(
         request=request,
@@ -652,7 +676,259 @@ def inbox_thread_panel(
             threads=all_threads,
             all_threads=all_threads,
             include_email_sidebar_oob=True,
+            operator_mode=operator_mode,
+            operator_pending_count=op_pending,
         ),
+    )
+
+
+# ─── Presencia colaborativa ────────────────────────────────────────────────────
+
+@router.post("/threads/{thread_id}/presence/ping", response_class=HTMLResponse)
+def thread_presence_ping(
+    request: Request,
+    thread_id: int,
+    db: Session = Depends(get_db),
+):
+    """Registra presencia del usuario y devuelve HTML con los demás espectadores."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+    display_name = str(user.get("display_name") or user.get("login_identifier") or "Usuario")
+
+    ping_presence(db, thread_id=thread_id, user_id=user_id,
+                  account_id=account_id, display_name=display_name)
+    others = get_presence_others(db, thread_id=thread_id, account_id=account_id,
+                                 exclude_user_id=user_id)
+
+    if not others:
+        return HTMLResponse("")
+
+    parts = ['<span class="inbox-presence-label">También viendo:</span>']
+    for v in others:
+        parts.append(
+            f'<span class="inbox-presence-avatar" '
+            f'style="background:{v["color"]}" '
+            f'title="{v["display_name"]}">{v["initials"]}</span>'
+        )
+    return HTMLResponse("".join(parts))
+
+
+# ─── Estado de espera ──────────────────────────────────────────────────────────
+
+@router.post("/threads/{thread_id}/set-waiting", response_class=HTMLResponse)
+def thread_set_waiting(
+    request: Request,
+    thread_id: int,
+    reason: str = Form(default=""),
+    waiting_until: str = Form(default=""),
+    op: int = Form(default=0),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+
+    import datetime as _dt
+    until_dt = None
+    if waiting_until:
+        try:
+            until_dt = _dt.datetime.fromisoformat(waiting_until).replace(
+                tzinfo=_dt.timezone.utc
+            )
+        except ValueError:
+            pass
+
+    set_thread_waiting(db, thread_id=thread_id, account_id=account_id,
+                       waiting_until=until_dt, reason=reason.strip() or None)
+
+    try:
+        thread, messages = get_thread_detail(db, account_id=account_id, thread_id=thread_id)
+        glpi_tickets = list_glpi_tickets_for_thread(db, account_id=account_id, thread_id=thread_id)
+        ai_thread_result = get_thread_ai_synthesis(db, thread_id)
+        thread_attachments = _get_thread_attachments(db, account_id=account_id, thread_id=thread_id)
+        thread_has_attachments = any(m.get("has_attachments") for m in messages)
+        all_threads = list_system_threads(db, account_id=account_id)
+    except ValueError:
+        return HTMLResponse("<p class='pane-empty-text'>Hilo no encontrado.</p>")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/inbox_thread_panel.html",
+        context=_template_context(
+            request, user=user, thread=thread, messages=messages,
+            thread_attachments=thread_attachments, thread_has_attachments=thread_has_attachments,
+            glpi_tickets=glpi_tickets, ai_thread_result=ai_thread_result,
+            threads=all_threads, all_threads=all_threads, include_email_sidebar_oob=True,
+            operator_mode=bool(op),
+            operator_pending_count=pending_unclaimed_count(db, account_id=account_id) if op else None,
+        ),
+    )
+
+
+@router.post("/threads/{thread_id}/unset-waiting", response_class=HTMLResponse)
+def thread_unset_waiting(
+    request: Request,
+    thread_id: int,
+    op: int = Form(default=0),
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+
+    unset_thread_waiting(db, thread_id=thread_id, account_id=account_id)
+
+    try:
+        thread, messages = get_thread_detail(db, account_id=account_id, thread_id=thread_id)
+        glpi_tickets = list_glpi_tickets_for_thread(db, account_id=account_id, thread_id=thread_id)
+        ai_thread_result = get_thread_ai_synthesis(db, thread_id)
+        thread_attachments = _get_thread_attachments(db, account_id=account_id, thread_id=thread_id)
+        thread_has_attachments = any(m.get("has_attachments") for m in messages)
+        all_threads = list_system_threads(db, account_id=account_id)
+    except ValueError:
+        return HTMLResponse("<p class='pane-empty-text'>Hilo no encontrado.</p>")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/inbox_thread_panel.html",
+        context=_template_context(
+            request, user=user, thread=thread, messages=messages,
+            thread_attachments=thread_attachments, thread_has_attachments=thread_has_attachments,
+            glpi_tickets=glpi_tickets, ai_thread_result=ai_thread_result,
+            threads=all_threads, all_threads=all_threads, include_email_sidebar_oob=True,
+            operator_mode=bool(op),
+            operator_pending_count=pending_unclaimed_count(db, account_id=account_id) if op else None,
+        ),
+    )
+
+
+# ─── Modo operador ─────────────────────────────────────────────────────────────
+
+def _render_operator_panel(request, user, db, account_id, user_id, thread_id):
+    """Renderiza el panel de hilo en modo operador."""
+    op_pending = pending_unclaimed_count(db, account_id=account_id)
+    try:
+        thread, messages = get_thread_detail(db, account_id=account_id, thread_id=thread_id)
+        glpi_tickets = list_glpi_tickets_for_thread(db, account_id=account_id, thread_id=thread_id)
+        ai_thread_result = get_thread_ai_synthesis(db, thread_id)
+        thread_attachments = _get_thread_attachments(db, account_id=account_id, thread_id=thread_id)
+        thread_has_attachments = any(m.get("has_attachments") for m in messages)
+        all_threads = list_system_threads(db, account_id=account_id)
+    except ValueError:
+        return HTMLResponse(
+            "<div class='inbox-operator-bar'>"
+            "<span class='inbox-operator-icon'>🎧</span>"
+            "<span class='inbox-operator-label'>Hilo no encontrado</span>"
+            "<button class='inbox-operator-exit-btn' "
+            "hx-post='/inbox/operator/exit' hx-target='#inbox-panel' hx-swap='innerHTML'>✕ Salir</button>"
+            "</div>"
+        )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/inbox_thread_panel.html",
+        context=_template_context(
+            request, user=user, thread=thread, messages=messages,
+            thread_attachments=thread_attachments, thread_has_attachments=thread_has_attachments,
+            glpi_tickets=glpi_tickets, ai_thread_result=ai_thread_result,
+            threads=all_threads, all_threads=all_threads, include_email_sidebar_oob=True,
+            operator_mode=True, operator_pending_count=op_pending,
+        ),
+    )
+
+
+@router.post("/inbox/operator/start", response_class=HTMLResponse)
+def inbox_operator_start(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+
+    thread_id = claim_next_thread(db, account_id=account_id, user_id=user_id)
+    if thread_id is None:
+        return HTMLResponse(
+            "<div class='pane-empty-state'>"
+            "<div class='pane-empty-icon'>🎧</div>"
+            "<h2 style='margin:0 0 8px;'>Cola vacía</h2>"
+            "<p class='pane-empty-text'>No hay hilos pendientes sin atender en este momento.</p>"
+            "<div style='margin-top:16px;'>"
+            "<button class='inbox-operator-exit-btn' "
+            "hx-post='/inbox/operator/exit' hx-target='#inbox-panel' hx-swap='innerHTML'>"
+            "✕ Salir del modo operador</button>"
+            "</div></div>",
+            headers={"HX-Trigger": '{"operatorModeChanged":{"active":false}}'},
+        )
+
+    resp = _render_operator_panel(request, user, db, account_id, user_id, thread_id)
+    resp.headers["HX-Trigger"] = '{"operatorModeChanged":{"active":true}}'
+    return resp
+
+
+@router.post("/inbox/operator/next", response_class=HTMLResponse)
+def inbox_operator_next(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+
+    thread_id = claim_next_thread(db, account_id=account_id, user_id=user_id)
+    if thread_id is None:
+        return HTMLResponse(
+            "<div class='pane-empty-state'>"
+            "<div class='pane-empty-icon'>✅</div>"
+            "<h2 style='margin:0 0 8px;'>Cola completada</h2>"
+            "<p class='pane-empty-text'>Has atendido todos los hilos pendientes. ¡Buen trabajo!</p>"
+            "<div style='margin-top:16px;'>"
+            "<button class='inbox-operator-exit-btn' "
+            "hx-post='/inbox/operator/exit' hx-target='#inbox-panel' hx-swap='innerHTML'>"
+            "✕ Salir del modo operador</button>"
+            "</div></div>",
+            headers={"HX-Trigger": '{"operatorModeChanged":{"active":false}}'},
+        )
+
+    return _render_operator_panel(request, user, db, account_id, user_id, thread_id)
+
+
+@router.post("/inbox/operator/exit", response_class=HTMLResponse)
+def inbox_operator_exit(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+
+    release_operator_claim(db, account_id=account_id, user_id=user_id)
+
+    return HTMLResponse(
+        "<div class='pane-empty-state'>"
+        "<div class='pane-empty-icon'>📨</div>"
+        "<h2 style='margin:0 0 8px;'>Bandeja unificada</h2>"
+        "<p class='pane-empty-text'>Selecciona un hilo de la lista para ver sus detalles.</p>"
+        "</div>",
+        headers={"HX-Trigger": '{"operatorModeChanged":{"active":false}}'},
     )
 
 
@@ -962,7 +1238,10 @@ def thread_live_updates(
     # ── Comprobar count de correos ───────────────────────────────────────────
     db_email_count = int(
         db.execute(
-            text("SELECT COUNT(*) FROM gestor_tickets.email_messages WHERE thread_id = :tid"),
+            text("""
+                SELECT COUNT(*) FROM gestor_tickets.email_thread_members
+                WHERE thread_id = :tid AND status = 'active'
+            """),
             {"tid": thread_id},
         ).scalar_one()
         or 0
