@@ -345,31 +345,30 @@
     <!-- ══ VISTA CRONOLOGÍA ═══════════════════════════════════════════ -->
     <div x-show="view === 'timeline'" style="display:none;" class="inbox-synthesis-view">
 
-        <section class="inbox-panel-section" style="padding-bottom:8px;">
+        <section class="inbox-panel-section" style="padding:0;">
             {% if messages %}
-            <div class="chat-thread">
+            <ol class="conv-list">
             {% for msg in messages %}
             {% set is_out = msg.direction == 'outbound' %}
-            {% set sj = msg.summary_json if msg.summary_json else {} %}
-            {% set ai_text = sj.get("nueva_informacion") or sj.get("problema_principal") or "" %}
-            <div class="chat-bubble-row {{ 'is-out' if is_out else 'is-in' }}">
-                <div class="chat-bubble {{ 'is-out' if is_out else 'is-in' }}">
-                    <div class="chat-meta">
-                        <span class="chat-sender">{{ msg.from_name or msg.from_email or "?" }}</span>
-                        <span class="chat-time">{{ (msg.sent_at | string)[5:16] | replace("T"," ") if msg.sent_at else "" }}</span>
-                        {% if msg.has_attachments %}<span class="chat-attach-icon" title="Tiene adjuntos">📎</span>{% endif %}
-                    </div>
-                    {% if ai_text %}
-                    <p class="chat-body">{{ ai_text }}</p>
-                    {% elif msg.body_text_preview %}
-                    <p class="chat-body chat-body--raw">{{ msg.body_text_preview[:280] }}{% if msg.body_text_preview|length > 280 %}…{% endif %}</p>
-                    {% endif %}
+            {% set sj = msg["summary_json"] if msg["summary_json"] else none %}
+            {% set ai_text = sj["nueva_informacion"] if sj and sj["nueva_informacion"] else (sj["problema_principal"] if sj and sj["problema_principal"] else none) %}
+            <li class="conv-item {{ 'is-out' if is_out else 'is-in' }}">
+                <div class="conv-header">
+                    <span class="conv-arrow">{{ "→" if is_out else "←" }}</span>
+                    <span class="conv-sender">{{ msg.from_name or msg.from_email or "?" }}</span>
+                    <span class="conv-date">{{ (msg.sent_at | string)[5:16] | replace("T", " ") if msg.sent_at else "" }}</span>
+                    {% if msg.has_attachments %}<span class="conv-clip" title="Adjuntos">📎</span>{% endif %}
                 </div>
-            </div>
+                {% if ai_text %}
+                <p class="conv-body">{{ ai_text }}</p>
+                {% elif msg.body_text_preview %}
+                <p class="conv-body is-raw">{{ msg.body_text_preview[:240] }}{% if msg.body_text_preview|length > 240 %}…{% endif %}</p>
+                {% endif %}
+            </li>
             {% endfor %}
-            </div>
+            </ol>
             {% else %}
-            <p class="pane-empty-text">Este hilo no tiene correos archivados.</p>
+            <p class="pane-empty-text" style="padding:16px;">Este hilo no tiene correos archivados.</p>
             {% endif %}
         </section>
 
