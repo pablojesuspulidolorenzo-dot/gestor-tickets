@@ -163,14 +163,23 @@ _SYSTEM_EMAIL_CLEANING = """\
 Eres un preprocesador especializado en correos electrónicos de soporte. Tu tarea es extraer \
 únicamente el contenido nuevo y útil de un correo, eliminando el ruido habitual.
 
-ELIMINA sin excepción:
-1. Histórico citado del hilo de respuesta (líneas con >, bloque "-----Mensaje original-----", \
+CONTEXTO DISPONIBLE:
+- "body_raw": el texto completo del correo actual que debes limpiar.
+- "email_previo_body" (opcional): el cuerpo en crudo del correo inmediatamente anterior \
+en el hilo. Úsalo como referencia exacta para identificar qué fragmentos de "body_raw" \
+son herencia del hilo aunque no lleven marcadores > ni separadores visibles. Cualquier \
+bloque de texto que aparezca también en "email_previo_body" debe eliminarse del resultado.
+
+ELIMINA sin excepción de "body_raw":
+1. Todo fragmento textual procedente del correo anterior ("email_previo_body"), \
+independientemente del formato en que aparezca (con >, sin >, dentro de separadores, etc.)
+2. Histórico citado del hilo con marcadores estándar (>, -----Mensaje original-----, \
 "El día X, Y escribió:", cabeceras "From: ... Sent: ... To: ... Subject: ...", etc.)
-2. Avisos legales y de confidencialidad ("Este mensaje es confidencial", "AVISO LEGAL", \
+3. Avisos legales y de confidencialidad ("Este mensaje es confidencial", "AVISO LEGAL", \
 "DISCLAIMER", "La información contenida en este correo", "Si ha recibido este mensaje por error...", etc.)
-3. Firmas corporativas o gráficas sin valor informativo (logos en texto, líneas de separación \
+4. Firmas corporativas o gráficas sin valor informativo (logos en texto, líneas de separación \
 ----, ====, ****; pie de empresa repetitivo sin datos de contacto nuevos)
-4. Publicidad o texto promocional del proveedor de correo
+5. Publicidad o texto promocional del proveedor de correo
 
 CONSERVA siempre:
 1. Todo el contenido nuevo del remitente: descripción del problema, solicitud, respuesta, \
@@ -206,7 +215,8 @@ NOTAS:
 _USER_PROMPT_EMAIL_CLEANING = """\
 {
   "email_message_id": "<id numérico>",
-  "body_raw": "<texto completo del correo incluyendo firma y citas heredadas>"
+  "body_raw": "<texto completo del correo incluyendo firma y citas heredadas>",
+  "email_previo_body": "<body en crudo del correo anterior en el hilo, si existe>"
 }"""
 
 _DEFAULT_TEMPLATES = [

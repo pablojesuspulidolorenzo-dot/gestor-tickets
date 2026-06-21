@@ -7,7 +7,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 ## Estado Actual
 
 - Ruta del proyecto en servidor: `/var/www/vhosts/gestor-tickets.es/docker/`
-- Version actual de la app: `0.1.68`
+- Version actual de la app: `0.1.69`
 - Stack: FastAPI, Jinja2, HTMX, PostgreSQL 17, GLPI, MariaDB, IMAP, Docker Compose
 - Esquema PostgreSQL principal: `gestor_tickets`
 - Archivo SQL de referencia: `gestor_tickets_v2_schema_postgresql17_sin_triggers.sql`
@@ -26,6 +26,7 @@ Este README esta escrito para que un desarrollador o un modelo LLM pueda entende
 - v0.1.60: auto-selección del correo más reciente al abrir "Correos reales"; menú ⋮ ampliado con Responder/Responder a todos/Reenviar (mailto:), Ignorar en este hilo y Eliminar del hilo (rojo); nuevos endpoints POST ignore-email y remove-email.
 - v0.1.61: panel de síntesis dividido en 4 pestañas independientes: Síntesis IA, Cronología (con contador), Tickets GLPI (con contador), Correos reales; header del hilo visible en todas las vistas excepto correos.
 - v0.1.62: panel de redacción integrado para Responder/Responder a todos/Reenviar; campos editables Para, CC, CCO (toggle), Asunto, cuerpo con cita original; adjuntar archivos múltiples; envío real vía SMTP (derivado del host IMAP); servicio smtp_service.py nuevo.
+- v0.1.69: Contrato 0 mejorado — se pasa email_previo_body (body crudo del correo anterior en el hilo) al prompt de limpieza para que el LLM identifique con precisión la herencia aunque no haya marcadores > ni separadores visibles; helper _get_previous_email_body extrae el .eml del correo inmediatamente anterior; el system prompt describe explícitamente cómo usar email_previo_body como referencia exacta de deduplicación.
 - v0.1.68: Contrato 0 «email_cleaning» — preprocesado IA previo al análisis individual: lee el body completo del .eml (hasta 6000 chars), extrae el contenido nuevo eliminando histórico citado y firmas legales, guarda el texto limpio en email_ai_processing.body_new, lo usa como body_text en el Contrato A; los datos de contacto de la firma (nombre, teléfono, empresa, cargo) se persisten automáticamente en contact_book; el prompt es editable/versionable como los demás y se auto-actualiza al arrancar si no fue modificado manualmente.
 - v0.1.67: adjuntos estilo Outlook — barra de adjuntos en el visor de cada correo con icono por tipo, tamaño y botón ⬇ Descargar (extrae del .eml en tiempo real); nueva pestaña "Adjuntos" en el panel de hilo (solo visible si hay correos con adjuntos, carga lazy HTMX al clic); endpoint seguro /api/emails/{id}/attachments/download?idx={n}.
 - v0.1.66: pestañas "Sugerencias" y "Participantes" en el panel de hilo — acciones IA convertidas en botones funcionales (crear ticket GLPI inline, ir a correos, ver GLPI, ver participantes, descartar) con trazabilidad en ai_action_executions; participantes con "Guardar en libreta" y "Enviar correo"; live-poll actualiza también los nuevos contenedores vía OOB swap.

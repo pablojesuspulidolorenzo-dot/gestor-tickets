@@ -162,6 +162,32 @@ def _get_thread_id_for_email(db: Session, email_message_id: int) -> int | None:
     return int(row) if row is not None else None
 
 
+def _get_previous_email_body(
+    db: Session,
+    *,
+    email_message_id: int,
+    thread_id: int,
+) -> str:
+    """Devuelve el body completo del correo inmediatamente anterior en el hilo (máx. 3000 chars)."""
+    row = db.execute(
+        text("""
+            SELECT em.eml_storage_path
+            FROM gestor_tickets.email_thread_members etm
+            JOIN gestor_tickets.email_messages em ON em.id = etm.email_message_id
+            WHERE etm.thread_id = :thread_id
+              AND etm.status = 'active'
+              AND em.id < :current_id
+            ORDER BY em.sent_at DESC NULLS LAST, em.id DESC
+            LIMIT 1
+        """),
+        {"thread_id": thread_id, "current_id": email_message_id},
+    ).mappings().first()
+
+    if not row or not row["eml_storage_path"]:
+        return ""
+    return _extract_full_body_from_eml(row["eml_storage_path"])[:3000]
+
+
 def _get_thread_context(
     db: Session,
     *,
@@ -460,11 +486,14 @@ def _run_cleaning_step(
     account_id: int,
     user_id: int | None,
     body_raw: str,
+    prev_body: str = "",
 ) -> tuple[str, dict | None]:
     """
     Ejecuta el preprocesado IA de limpieza del cuerpo del correo (Contrato 0).
     Devuelve (body_clean, firma_contacto).
     Si el prompt no está configurado o la llamada falla, devuelve el body raw truncado.
+    prev_body: cuerpo del correo inmediatamente anterior en el hilo, para que el LLM
+    identifique con precisión qué fragmentos son heredados aunque no tengan marcadores >.
     """
     active_version = get_active_version(db, "email_cleaning")
     if not active_version:
@@ -474,6 +503,8 @@ def _run_cleaning_step(
         "email_message_id": email_message_id,
         "body_raw": (body_raw or "")[:6000],
     }
+    if prev_body:
+        user_content["email_previo_body"] = prev_body[:3000]
 
     try:
         parsed, _call_id = call_with_fallback(
@@ -598,6 +629,13 @@ def process_email(
     if not body_raw:
         body_raw = email.get("body_text_preview") or ""
 
+    # Cuerpo del correo anterior en el hilo como referencia de detección de herencia
+    prev_body = ""
+    if thread_id:
+        prev_body = _get_previous_email_body(
+            db, email_message_id=email_message_id, thread_id=thread_id,
+        )
+
     body_clean, firma_contacto = _run_cleaning_step(
         db,
         record_id=record_id,
@@ -605,6 +643,7 @@ def process_email(
         account_id=account_id,
         user_id=user_id,
         body_raw=body_raw,
+        prev_body=prev_body,
     )
     # Usar el body limpio como entrada del análisis; si quedó vacío, fallback al raw
     body_for_analysis = body_clean.strip() if body_clean.strip() else body_raw[:3000]
