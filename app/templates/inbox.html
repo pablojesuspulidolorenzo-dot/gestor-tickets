@@ -23,11 +23,10 @@
                 <span class="ticket-count-badge">{{ total_threads }}</span>
                 <button class="inbox-operator-toggle-btn"
                         :class="{ 'is-active': operatorMode }"
-                        title="Modo Operador — atiende hilos en cola de uno en uno"
-                        hx-post="/inbox/operator/start"
+                        :title="operatorMode ? 'Salir del modo Operador' : 'Modo Operador — atiende hilos en cola de uno en uno'"
+                        :hx-post="operatorMode ? '/inbox/operator/exit' : '/inbox/operator/start'"
                         hx-target="#inbox-panel"
-                        hx-swap="innerHTML"
-                        @click="operatorMode = true">
+                        hx-swap="innerHTML">
                     🎧&nbsp;ASISTENCIA
                 </button>
             </div>
