@@ -53,20 +53,52 @@ def ensure_migrations(db: Session) -> None:
 
     db.execute(text("""
         CREATE TABLE IF NOT EXISTS gestor_tickets.operator_queue_claims (
-          id          BIGSERIAL   PRIMARY KEY,
-          thread_id   BIGINT      NOT NULL
+          id           BIGSERIAL   PRIMARY KEY,
+          thread_id    BIGINT      NOT NULL
             REFERENCES gestor_tickets.system_threads(id) ON DELETE CASCADE,
-          user_id     BIGINT      NOT NULL
+          user_id      BIGINT      NOT NULL
             REFERENCES gestor_tickets.account_users(id)  ON DELETE CASCADE,
-          account_id  BIGINT      NOT NULL,
-          claimed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-          released_at TIMESTAMPTZ
+          account_id   BIGINT      NOT NULL,
+          display_name TEXT        NOT NULL DEFAULT '',
+          is_pinned    BOOLEAN     NOT NULL DEFAULT false,
+          claimed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+          released_at  TIMESTAMPTZ
         );
     """))
     db.execute(text("""
         CREATE UNIQUE INDEX IF NOT EXISTS uq_operator_active_thread
           ON gestor_tickets.operator_queue_claims (thread_id)
           WHERE released_at IS NULL;
+    """))
+
+    # Columnas adicionales idempotentes en claims (por si la tabla ya existía sin ellas)
+    db.execute(text("""
+        ALTER TABLE gestor_tickets.operator_queue_claims
+          ADD COLUMN IF NOT EXISTS display_name TEXT        NOT NULL DEFAULT '',
+          ADD COLUMN IF NOT EXISTS is_pinned    BOOLEAN     NOT NULL DEFAULT false;
+    """))
+
+    # Tabla de solicitudes de transferencia de control
+    db.execute(text("""
+        CREATE TABLE IF NOT EXISTS gestor_tickets.thread_control_requests (
+          id             BIGSERIAL   PRIMARY KEY,
+          thread_id      BIGINT      NOT NULL
+            REFERENCES gestor_tickets.system_threads(id) ON DELETE CASCADE,
+          requester_id   BIGINT      NOT NULL
+            REFERENCES gestor_tickets.account_users(id)  ON DELETE CASCADE,
+          requester_name TEXT        NOT NULL DEFAULT '',
+          holder_id      BIGINT      NOT NULL
+            REFERENCES gestor_tickets.account_users(id)  ON DELETE CASCADE,
+          account_id     BIGINT      NOT NULL,
+          status         TEXT        NOT NULL DEFAULT 'pending',
+          created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+          resolved_at    TIMESTAMPTZ
+        );
+    """))
+    db.execute(text("""
+        CREATE INDEX IF NOT EXISTS ix_tcr_holder_pending
+          ON gestor_tickets.thread_control_requests (holder_id, account_id)
+          WHERE status = 'pending';
     """))
 
     db.commit()
@@ -160,7 +192,7 @@ def list_threads_filtered(
             GROUP BY thread_id
         ),
         op_claim AS (
-            SELECT thread_id, user_id AS claimed_by
+            SELECT thread_id, user_id AS claimed_by, display_name AS claim_name
             FROM gestor_tickets.operator_queue_claims
             WHERE account_id = :account_id AND released_at IS NULL
         )
@@ -182,7 +214,8 @@ def list_threads_filtered(
             le.destinatario_tipo        AS last_destinatario_tipo,
             le.urgencia                 AS last_urgencia,
             COALESCE(pr.others, 0)      AS others_viewing,
-            oc.claimed_by               AS operator_claimed_by
+            oc.claimed_by               AS operator_claimed_by,
+            oc.claim_name               AS operator_claim_name
         FROM gestor_tickets.system_threads st
         LEFT JOIN last_email  le ON le.thread_id = st.id
         LEFT JOIN thread_msgs tm ON tm.thread_id = st.id
@@ -343,30 +376,41 @@ def get_presence_others(
 # ─── Modo operador ────────────────────────────────────────────────────────────
 
 def get_my_active_claim(db: Session, *, account_id: int, user_id: int) -> int | None:
+    """Devuelve el thread_id del claim NO pinned más reciente del usuario."""
     val = db.execute(text("""
         SELECT thread_id
         FROM gestor_tickets.operator_queue_claims
-        WHERE user_id = :user_id AND account_id = :account_id
+        WHERE user_id     = :user_id
+          AND account_id  = :account_id
           AND released_at IS NULL
+          AND is_pinned   = false
         ORDER BY claimed_at DESC LIMIT 1
     """), {"user_id": user_id, "account_id": account_id}).scalar_one_or_none()
     return int(val) if val is not None else None
 
 
 def release_operator_claim(db: Session, *, account_id: int, user_id: int) -> None:
+    """Libera los claims NO pinned del usuario (las reservas manuales se mantienen)."""
     db.execute(text("""
         UPDATE gestor_tickets.operator_queue_claims
            SET released_at = now()
          WHERE user_id     = :user_id
            AND account_id  = :account_id
            AND released_at IS NULL
+           AND is_pinned   = false
     """), {"user_id": user_id, "account_id": account_id})
     db.commit()
 
 
-def claim_next_thread(db: Session, *, account_id: int, user_id: int) -> int | None:
+def claim_next_thread(
+    db: Session,
+    *,
+    account_id: int,
+    user_id: int,
+    display_name: str = "",
+) -> int | None:
     """
-    Libera el claim actual del usuario y reclama el siguiente hilo pendiente sin claim.
+    Libera el claim NO pinned actual y reclama el siguiente hilo pendiente sin claim.
     Usa FOR UPDATE SKIP LOCKED para evitar colisiones concurrentes.
     Devuelve thread_id reclamado, o None si la cola está vacía.
     """
@@ -390,11 +434,11 @@ def claim_next_thread(db: Session, *, account_id: int, user_id: int) -> int | No
                 FOR UPDATE OF st SKIP LOCKED
             )
             INSERT INTO gestor_tickets.operator_queue_claims
-                (thread_id, user_id, account_id)
-            SELECT thread_id, :user_id, :account_id FROM candidate
+                (thread_id, user_id, account_id, display_name)
+            SELECT thread_id, :user_id, :account_id, :display_name FROM candidate
             ON CONFLICT DO NOTHING
             RETURNING thread_id
-        """), {"account_id": account_id, "user_id": user_id})
+        """), {"account_id": account_id, "user_id": user_id, "display_name": display_name})
 
         claimed = result.scalar_one_or_none()
         if claimed is not None:
@@ -403,6 +447,288 @@ def claim_next_thread(db: Session, *, account_id: int, user_id: int) -> int | No
         db.rollback()
 
     return None
+
+
+# ─── Control de hilos (claim individual, pin, transferencia) ─────────────────
+
+def get_thread_claim(
+    db: Session,
+    *,
+    thread_id: int,
+    account_id: int,
+) -> dict | None:
+    """Devuelve el claim activo del hilo, o None si está libre."""
+    row = db.execute(text("""
+        SELECT user_id, display_name, is_pinned, claimed_at
+        FROM gestor_tickets.operator_queue_claims
+        WHERE thread_id  = :thread_id
+          AND account_id = :account_id
+          AND released_at IS NULL
+        LIMIT 1
+    """), {"thread_id": thread_id, "account_id": account_id}).mappings().one_or_none()
+    return dict(row) if row else None
+
+
+def check_user_has_claim(
+    db: Session,
+    *,
+    thread_id: int,
+    account_id: int,
+    user_id: int,
+) -> bool:
+    val = db.execute(text("""
+        SELECT 1 FROM gestor_tickets.operator_queue_claims
+        WHERE thread_id   = :thread_id
+          AND account_id  = :account_id
+          AND user_id     = :user_id
+          AND released_at IS NULL
+    """), {"thread_id": thread_id, "account_id": account_id,
+           "user_id": user_id}).scalar_one_or_none()
+    return val is not None
+
+
+def claim_specific_thread(
+    db: Session,
+    *,
+    thread_id: int,
+    account_id: int,
+    user_id: int,
+    display_name: str = "",
+) -> bool:
+    """
+    Libera los claims NO pinned del usuario y reclama el hilo indicado.
+    Devuelve True si el claim fue exitoso, False si otro lo tiene.
+    """
+    db.execute(text("""
+        UPDATE gestor_tickets.operator_queue_claims
+           SET released_at = now()
+         WHERE user_id     = :user_id
+           AND account_id  = :account_id
+           AND released_at IS NULL
+           AND is_pinned   = false
+           AND thread_id  != :thread_id
+    """), {"user_id": user_id, "account_id": account_id, "thread_id": thread_id})
+
+    result = db.execute(text("""
+        INSERT INTO gestor_tickets.operator_queue_claims
+            (thread_id, user_id, account_id, display_name)
+        VALUES (:thread_id, :user_id, :account_id, :display_name)
+        ON CONFLICT DO NOTHING
+        RETURNING thread_id
+    """), {"thread_id": thread_id, "user_id": user_id,
+           "account_id": account_id, "display_name": display_name})
+
+    if result.scalar_one_or_none() is not None:
+        db.commit()
+        return True
+
+    # Ya tenemos el claim nosotros mismos (p.ej. pinned previo)
+    already = db.execute(text("""
+        SELECT 1 FROM gestor_tickets.operator_queue_claims
+        WHERE thread_id = :thread_id AND user_id = :user_id AND released_at IS NULL
+    """), {"thread_id": thread_id, "user_id": user_id}).scalar_one_or_none()
+    if already:
+        db.commit()
+        return True
+
+    db.rollback()
+    return False
+
+
+def release_specific_claim(
+    db: Session,
+    *,
+    thread_id: int,
+    account_id: int,
+    user_id: int,
+) -> None:
+    """Libera el claim de un hilo específico (incluye pinned)."""
+    db.execute(text("""
+        UPDATE gestor_tickets.operator_queue_claims
+           SET released_at = now()
+         WHERE thread_id   = :thread_id
+           AND user_id     = :user_id
+           AND account_id  = :account_id
+           AND released_at IS NULL
+    """), {"thread_id": thread_id, "user_id": user_id, "account_id": account_id})
+    db.commit()
+
+
+def toggle_pin_claim(
+    db: Session,
+    *,
+    thread_id: int,
+    account_id: int,
+    user_id: int,
+    display_name: str = "",
+) -> bool:
+    """
+    Alterna is_pinned en el claim activo del usuario para este hilo.
+    Si no tiene claim, crea uno pinned.
+    Devuelve el nuevo valor de is_pinned.
+    """
+    row = db.execute(text("""
+        UPDATE gestor_tickets.operator_queue_claims
+           SET is_pinned = NOT is_pinned
+         WHERE thread_id   = :thread_id
+           AND user_id     = :user_id
+           AND account_id  = :account_id
+           AND released_at IS NULL
+        RETURNING is_pinned
+    """), {"thread_id": thread_id, "user_id": user_id, "account_id": account_id}).scalar_one_or_none()
+
+    if row is not None:
+        db.commit()
+        return bool(row)
+
+    # No tenía claim: crear uno pinned
+    result = db.execute(text("""
+        INSERT INTO gestor_tickets.operator_queue_claims
+            (thread_id, user_id, account_id, display_name, is_pinned)
+        VALUES (:thread_id, :user_id, :account_id, :display_name, true)
+        ON CONFLICT DO NOTHING
+        RETURNING is_pinned
+    """), {"thread_id": thread_id, "user_id": user_id,
+           "account_id": account_id, "display_name": display_name})
+    val = result.scalar_one_or_none()
+    db.commit()
+    return bool(val) if val is not None else False
+
+
+# ─── Solicitudes de transferencia de control ─────────────────────────────────
+
+def create_control_request(
+    db: Session,
+    *,
+    thread_id: int,
+    account_id: int,
+    requester_id: int,
+    requester_name: str,
+    holder_id: int,
+) -> int | None:
+    """
+    Crea una solicitud de transferencia de control anulando las previas pendientes.
+    Devuelve el id de la nueva solicitud.
+    """
+    db.execute(text("""
+        UPDATE gestor_tickets.thread_control_requests
+           SET status = 'cancelled', resolved_at = now()
+         WHERE thread_id    = :thread_id
+           AND requester_id = :requester_id
+           AND status       = 'pending'
+    """), {"thread_id": thread_id, "requester_id": requester_id})
+
+    result = db.execute(text("""
+        INSERT INTO gestor_tickets.thread_control_requests
+            (thread_id, requester_id, requester_name, holder_id, account_id)
+        VALUES (:thread_id, :requester_id, :requester_name, :holder_id, :account_id)
+        RETURNING id
+    """), {"thread_id": thread_id, "requester_id": requester_id,
+           "requester_name": requester_name, "holder_id": holder_id,
+           "account_id": account_id})
+    req_id = result.scalar_one_or_none()
+    db.commit()
+    return req_id
+
+
+def get_pending_requests_for_me(
+    db: Session,
+    *,
+    user_id: int,
+    account_id: int,
+    thread_id: int | None = None,
+) -> list[dict]:
+    """Solicitudes de control pendientes donde YO soy el titular actual."""
+    extra = "AND thread_id = :thread_id" if thread_id is not None else ""
+    rows = db.execute(text(f"""
+        SELECT id, thread_id, requester_id, requester_name, created_at
+        FROM gestor_tickets.thread_control_requests
+        WHERE holder_id  = :user_id
+          AND account_id = :account_id
+          AND status     = 'pending'
+          {extra}
+        ORDER BY created_at DESC
+    """), {"user_id": user_id, "account_id": account_id,
+           "thread_id": thread_id}).mappings().all()
+    return [dict(r) for r in rows]
+
+
+def get_my_request_status(
+    db: Session,
+    *,
+    thread_id: int,
+    requester_id: int,
+    account_id: int,
+) -> str | None:
+    """Estado más reciente de la solicitud de control del usuario en este hilo."""
+    val = db.execute(text("""
+        SELECT status FROM gestor_tickets.thread_control_requests
+        WHERE thread_id    = :thread_id
+          AND requester_id = :requester_id
+          AND account_id   = :account_id
+        ORDER BY created_at DESC
+        LIMIT 1
+    """), {"thread_id": thread_id, "requester_id": requester_id,
+           "account_id": account_id}).scalar_one_or_none()
+    return str(val) if val else None
+
+
+def resolve_control_request(
+    db: Session,
+    *,
+    request_id: int,
+    action: str,
+    account_id: int,
+    holder_id: int,
+) -> dict | None:
+    """
+    Resuelve una solicitud pendiente ('granted' o 'denied').
+    Si granted, transfiere el claim al solicitante.
+    Devuelve dict con thread_id y requester_id, o None si no se encontró.
+    """
+    row = db.execute(text("""
+        UPDATE gestor_tickets.thread_control_requests
+           SET status = :action, resolved_at = now()
+         WHERE id         = :request_id
+           AND holder_id  = :holder_id
+           AND account_id = :account_id
+           AND status     = 'pending'
+        RETURNING thread_id, requester_id, requester_name
+    """), {"request_id": request_id, "action": action,
+           "holder_id": holder_id, "account_id": account_id}).mappings().one_or_none()
+
+    if row is None:
+        db.rollback()
+        return None
+
+    if action == "granted":
+        tid = row["thread_id"]
+        new_owner = row["requester_id"]
+        new_name = row["requester_name"] or ""
+        # Liberar claim del titular actual
+        db.execute(text("""
+            UPDATE gestor_tickets.operator_queue_claims
+               SET released_at = now()
+             WHERE thread_id   = :tid AND user_id = :holder_id
+               AND account_id  = :account_id AND released_at IS NULL
+        """), {"tid": tid, "holder_id": holder_id, "account_id": account_id})
+        # Liberar claim no-pinned del solicitante
+        db.execute(text("""
+            UPDATE gestor_tickets.operator_queue_claims
+               SET released_at = now()
+             WHERE user_id     = :new_owner AND account_id = :account_id
+               AND released_at IS NULL AND is_pinned = false AND thread_id != :tid
+        """), {"new_owner": new_owner, "account_id": account_id, "tid": tid})
+        # Asignar claim al solicitante
+        db.execute(text("""
+            INSERT INTO gestor_tickets.operator_queue_claims
+                (thread_id, user_id, account_id, display_name)
+            VALUES (:tid, :new_owner, :account_id, :new_name)
+            ON CONFLICT DO NOTHING
+        """), {"tid": tid, "new_owner": new_owner, "account_id": account_id, "new_name": new_name})
+
+    db.commit()
+    return dict(row)
 
 
 def pending_unclaimed_count(db: Session, *, account_id: int) -> int:

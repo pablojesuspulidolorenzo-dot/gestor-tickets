@@ -68,14 +68,23 @@ from app.services.thread_service import (
 )
 from app.services.inbox_filter_service import (
     FILTER_LABELS,
+    check_user_has_claim,
     claim_next_thread,
+    claim_specific_thread,
+    create_control_request,
     get_my_active_claim,
+    get_my_request_status,
+    get_pending_requests_for_me,
     get_presence_others,
+    get_thread_claim,
     list_threads_filtered,
     pending_unclaimed_count,
     ping_presence,
     release_operator_claim,
+    release_specific_claim,
+    resolve_control_request,
     set_thread_waiting,
+    toggle_pin_claim,
     unset_thread_waiting,
 )
 from app.services.email_ai_processing_service import get_email_ai_result, process_email
@@ -634,6 +643,7 @@ def inbox_thread_panel(
     request: Request,
     thread_id: int,
     op: int = 0,
+    claim: int = 0,
     db: Session = Depends(get_db),
 ):
     """Partial HTMX: carga el panel derecho del hilo seleccionado."""
@@ -647,6 +657,17 @@ def inbox_thread_panel(
 
     account_id = int(user["account_id"])
     user_id = int(user.get("id") or user.get("user_id") or 0)
+    display_name = str(user.get("display_name") or user.get("login_identifier") or "Usuario")
+
+    # Auto-claim si está en modo operador y se solicita
+    oob_refresh = False
+    if op and claim:
+        success = claim_specific_thread(
+            db, thread_id=thread_id, account_id=account_id,
+            user_id=user_id, display_name=display_name,
+        )
+        if success:
+            oob_refresh = True
 
     try:
         thread, messages = get_thread_detail(db, account_id=account_id, thread_id=thread_id)
@@ -660,8 +681,12 @@ def inbox_thread_panel(
 
     operator_mode = bool(op)
     op_pending = pending_unclaimed_count(db, account_id=account_id) if operator_mode else None
+    claim_info = get_thread_claim(db, thread_id=thread_id, account_id=account_id)
+    my_request = get_my_request_status(
+        db, thread_id=thread_id, requester_id=user_id, account_id=account_id
+    ) if claim_info and claim_info["user_id"] != user_id else None
 
-    return templates.TemplateResponse(
+    resp = templates.TemplateResponse(
         request=request,
         name="partials/inbox_thread_panel.html",
         context=_template_context(
@@ -678,8 +703,14 @@ def inbox_thread_panel(
             include_email_sidebar_oob=True,
             operator_mode=operator_mode,
             operator_pending_count=op_pending,
+            claim_info=claim_info,
+            current_user_id=user_id,
+            my_control_request=my_request,
         ),
     )
+    if oob_refresh:
+        resp.headers["HX-Trigger"] = '{"refreshThreadList":{}}'
+    return resp
 
 
 # ─── Presencia colaborativa ────────────────────────────────────────────────────
@@ -690,7 +721,7 @@ def thread_presence_ping(
     thread_id: int,
     db: Session = Depends(get_db),
 ):
-    """Registra presencia del usuario y devuelve HTML con los demás espectadores."""
+    """Registra presencia, devuelve espectadores + notificación de solicitudes entrantes."""
     user = require_session_user(request)
     if isinstance(user, RedirectResponse):
         return user
@@ -703,17 +734,46 @@ def thread_presence_ping(
                   account_id=account_id, display_name=display_name)
     others = get_presence_others(db, thread_id=thread_id, account_id=account_id,
                                  exclude_user_id=user_id)
+    pending_reqs = get_pending_requests_for_me(
+        db, user_id=user_id, account_id=account_id, thread_id=thread_id
+    )
 
-    if not others:
-        return HTMLResponse("")
+    parts: list[str] = []
+    if others:
+        parts.append('<span class="inbox-presence-label">También viendo:</span>')
+        for v in others:
+            parts.append(
+                f'<span class="inbox-presence-avatar" '
+                f'style="background:{v["color"]}" '
+                f'title="{v["display_name"]}">{v["initials"]}</span>'
+            )
 
-    parts = ['<span class="inbox-presence-label">También viendo:</span>']
-    for v in others:
-        parts.append(
-            f'<span class="inbox-presence-avatar" '
-            f'style="background:{v["color"]}" '
-            f'title="{v["display_name"]}">{v["initials"]}</span>'
+    # Notificación OOB: solicitudes de control entrantes para el titular
+    if pending_reqs:
+        req = pending_reqs[0]
+        notif_html = (
+            f'<div id="inbox-control-request-notif" '
+            f'hx-swap-oob="innerHTML:#inbox-control-request-notif">'
+            f'<div class="inbox-ctrl-request-banner">'
+            f'<span class="inbox-ctrl-request-icon">🔔</span>'
+            f'<span class="inbox-ctrl-request-text">'
+            f'<strong>{req["requester_name"]}</strong> solicita el control de este hilo</span>'
+            f'<button class="inbox-ctrl-grant-btn" '
+            f'hx-post="/threads/{thread_id}/grant-control/{req["id"]}" '
+            f'hx-target="#inbox-panel" hx-swap="innerHTML">Ceder</button>'
+            f'<button class="inbox-ctrl-deny-btn" '
+            f'hx-post="/threads/{thread_id}/deny-control/{req["id"]}" '
+            f'hx-target="#inbox-control-request-notif" hx-swap="innerHTML">Denegar</button>'
+            f'</div></div>'
         )
+        parts.append(notif_html)
+    else:
+        # Limpiar notificación si ya no hay solicitudes
+        parts.append(
+            '<div id="inbox-control-request-notif" '
+            'hx-swap-oob="innerHTML:#inbox-control-request-notif"></div>'
+        )
+
     return HTMLResponse("".join(parts))
 
 
@@ -833,6 +893,7 @@ def _render_operator_panel(request, user, db, account_id, user_id, thread_id):
             "</div>"
         )
 
+    claim_info = get_thread_claim(db, thread_id=thread_id, account_id=account_id)
     return templates.TemplateResponse(
         request=request,
         name="partials/inbox_thread_panel.html",
@@ -842,6 +903,7 @@ def _render_operator_panel(request, user, db, account_id, user_id, thread_id):
             glpi_tickets=glpi_tickets, ai_thread_result=ai_thread_result,
             threads=all_threads, all_threads=all_threads, include_email_sidebar_oob=True,
             operator_mode=True, operator_pending_count=op_pending,
+            claim_info=claim_info, current_user_id=user_id, my_control_request=None,
         ),
     )
 
@@ -858,7 +920,10 @@ def inbox_operator_start(
     account_id = int(user["account_id"])
     user_id = int(user.get("id") or user.get("user_id") or 0)
 
-    thread_id = claim_next_thread(db, account_id=account_id, user_id=user_id)
+    display_name = str(user.get("display_name") or user.get("login_identifier") or "Usuario")
+    thread_id = claim_next_thread(
+        db, account_id=account_id, user_id=user_id, display_name=display_name
+    )
     if thread_id is None:
         return HTMLResponse(
             "<div class='pane-empty-state'>"
@@ -874,7 +939,7 @@ def inbox_operator_start(
         )
 
     resp = _render_operator_panel(request, user, db, account_id, user_id, thread_id)
-    resp.headers["HX-Trigger"] = '{"operatorModeChanged":{"active":true}}'
+    resp.headers["HX-Trigger"] = '{"operatorModeChanged":{"active":true},"refreshThreadList":{}}'
     return resp
 
 
@@ -890,7 +955,10 @@ def inbox_operator_next(
     account_id = int(user["account_id"])
     user_id = int(user.get("id") or user.get("user_id") or 0)
 
-    thread_id = claim_next_thread(db, account_id=account_id, user_id=user_id)
+    display_name = str(user.get("display_name") or user.get("login_identifier") or "Usuario")
+    thread_id = claim_next_thread(
+        db, account_id=account_id, user_id=user_id, display_name=display_name
+    )
     if thread_id is None:
         return HTMLResponse(
             "<div class='pane-empty-state'>"
@@ -905,7 +973,9 @@ def inbox_operator_next(
             headers={"HX-Trigger": '{"operatorModeChanged":{"active":false}}'},
         )
 
-    return _render_operator_panel(request, user, db, account_id, user_id, thread_id)
+    resp = _render_operator_panel(request, user, db, account_id, user_id, thread_id)
+    resp.headers["HX-Trigger"] = '{"refreshThreadList":{}}'
+    return resp
 
 
 @router.post("/inbox/operator/exit", response_class=HTMLResponse)
@@ -928,8 +998,191 @@ def inbox_operator_exit(
         "<h2 style='margin:0 0 8px;'>Bandeja unificada</h2>"
         "<p class='pane-empty-text'>Selecciona un hilo de la lista para ver sus detalles.</p>"
         "</div>",
-        headers={"HX-Trigger": '{"operatorModeChanged":{"active":false}}'},
+        headers={
+            "HX-Trigger": '{"operatorModeChanged":{"active":false},"refreshThreadList":{}}'
+        },
     )
+
+
+# ─── Control de hilos: claim manual, pin, transferencia ───────────────────────
+
+def _reload_panel(request, user, db, account_id, user_id, thread_id, *, op: bool = False):
+    """Recarga el panel completo de un hilo con claim_info actualizado."""
+    op_pending = pending_unclaimed_count(db, account_id=account_id) if op else None
+    try:
+        thread, messages = get_thread_detail(db, account_id=account_id, thread_id=thread_id)
+        glpi_tickets = list_glpi_tickets_for_thread(db, account_id=account_id, thread_id=thread_id)
+        ai_thread_result = get_thread_ai_synthesis(db, thread_id)
+        thread_attachments = _get_thread_attachments(db, account_id=account_id, thread_id=thread_id)
+        thread_has_attachments = any(m.get("has_attachments") for m in messages)
+        all_threads = list_system_threads(db, account_id=account_id)
+    except ValueError:
+        return HTMLResponse("<p class='pane-empty-text'>Hilo no encontrado.</p>")
+
+    claim_info = get_thread_claim(db, thread_id=thread_id, account_id=account_id)
+    my_request = get_my_request_status(
+        db, thread_id=thread_id, requester_id=user_id, account_id=account_id
+    ) if claim_info and claim_info["user_id"] != user_id else None
+
+    return templates.TemplateResponse(
+        request=request,
+        name="partials/inbox_thread_panel.html",
+        context=_template_context(
+            request, user=user, thread=thread, messages=messages,
+            thread_attachments=thread_attachments, thread_has_attachments=thread_has_attachments,
+            glpi_tickets=glpi_tickets, ai_thread_result=ai_thread_result,
+            threads=all_threads, all_threads=all_threads, include_email_sidebar_oob=True,
+            operator_mode=op, operator_pending_count=op_pending,
+            claim_info=claim_info, current_user_id=user_id,
+            my_control_request=my_request,
+        ),
+    )
+
+
+@router.post("/threads/{thread_id}/claim", response_class=HTMLResponse)
+def thread_claim(
+    request: Request,
+    thread_id: int,
+    op: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Reclama un hilo específico (modo normal: crea claim pinned; modo operador: no-pinned)."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+    display_name = str(user.get("display_name") or user.get("login_identifier") or "Usuario")
+
+    success = claim_specific_thread(
+        db, thread_id=thread_id, account_id=account_id,
+        user_id=user_id, display_name=display_name,
+    )
+    resp = _reload_panel(request, user, db, account_id, user_id, thread_id, op=bool(op))
+    if success:
+        resp.headers["HX-Trigger"] = '{"refreshThreadList":{}}'
+    return resp
+
+
+@router.post("/threads/{thread_id}/release-claim", response_class=HTMLResponse)
+def thread_release_claim(
+    request: Request,
+    thread_id: int,
+    op: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Libera el claim de un hilo específico."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+
+    release_specific_claim(db, thread_id=thread_id, account_id=account_id, user_id=user_id)
+    resp = _reload_panel(request, user, db, account_id, user_id, thread_id, op=bool(op))
+    resp.headers["HX-Trigger"] = '{"refreshThreadList":{}}'
+    return resp
+
+
+@router.post("/threads/{thread_id}/pin-claim", response_class=HTMLResponse)
+def thread_pin_claim(
+    request: Request,
+    thread_id: int,
+    op: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Alterna la reserva (pin) del hilo para el usuario actual."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+    display_name = str(user.get("display_name") or user.get("login_identifier") or "Usuario")
+
+    toggle_pin_claim(
+        db, thread_id=thread_id, account_id=account_id,
+        user_id=user_id, display_name=display_name,
+    )
+    resp = _reload_panel(request, user, db, account_id, user_id, thread_id, op=bool(op))
+    resp.headers["HX-Trigger"] = '{"refreshThreadList":{}}'
+    return resp
+
+
+@router.post("/threads/{thread_id}/request-control", response_class=HTMLResponse)
+def thread_request_control(
+    request: Request,
+    thread_id: int,
+    op: int = 0,
+    db: Session = Depends(get_db),
+):
+    """Solicita el control de un hilo reclamado por otro usuario."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+    display_name = str(user.get("display_name") or user.get("login_identifier") or "Usuario")
+
+    claim = get_thread_claim(db, thread_id=thread_id, account_id=account_id)
+    if claim and claim["user_id"] != user_id:
+        create_control_request(
+            db, thread_id=thread_id, account_id=account_id,
+            requester_id=user_id, requester_name=display_name,
+            holder_id=claim["user_id"],
+        )
+    return _reload_panel(request, user, db, account_id, user_id, thread_id, op=bool(op))
+
+
+@router.post("/threads/{thread_id}/grant-control/{request_id}", response_class=HTMLResponse)
+def thread_grant_control(
+    request: Request,
+    thread_id: int,
+    request_id: int,
+    op: int = 0,
+    db: Session = Depends(get_db),
+):
+    """El titular cede el control al solicitante."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+
+    resolve_control_request(
+        db, request_id=request_id, action="granted",
+        account_id=account_id, holder_id=user_id,
+    )
+    resp = _reload_panel(request, user, db, account_id, user_id, thread_id, op=bool(op))
+    resp.headers["HX-Trigger"] = '{"refreshThreadList":{}}'
+    return resp
+
+
+@router.post("/threads/{thread_id}/deny-control/{request_id}", response_class=HTMLResponse)
+def thread_deny_control(
+    request: Request,
+    thread_id: int,
+    request_id: int,
+    db: Session = Depends(get_db),
+):
+    """El titular deniega la solicitud de control. Solo limpia la notificación."""
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+    user = _ensure_session_permissions(user, db)
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+
+    resolve_control_request(
+        db, request_id=request_id, action="denied",
+        account_id=account_id, holder_id=user_id,
+    )
+    # Solo limpiar la notificación (el target es #inbox-control-request-notif)
+    return HTMLResponse("")
 
 
 def _extract_eml_attachments(eml_path: str) -> list[dict]:
@@ -1162,6 +1415,18 @@ def thread_synthesize_ai(
         return user
     user = _ensure_session_permissions(user, db)
 
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+    claim = get_thread_claim(db, thread_id=thread_id, account_id=account_id)
+    if claim and claim["user_id"] != user_id:
+        return HTMLResponse(
+            f'<div class="claim-check-failed">'
+            f'<strong>🔒 Sin control:</strong> Este hilo está en uso por '
+            f'<strong>{claim["display_name"] or "otro operador"}</strong>. '
+            f'<button hx-get="/inbox/thread/{thread_id}" hx-target="#inbox-panel" '
+            f'hx-swap="innerHTML">Actualizar</button></div>'
+        )
+
     outcome = synthesize_thread(
         db,
         thread_id=thread_id,
@@ -1352,6 +1617,18 @@ def thread_reprocess_ai(
     if isinstance(user, RedirectResponse):
         return user
     user = _ensure_session_permissions(user, db)
+
+    account_id = int(user["account_id"])
+    user_id = int(user.get("id") or user.get("user_id") or 0)
+    claim = get_thread_claim(db, thread_id=thread_id, account_id=account_id)
+    if claim and claim["user_id"] != user_id:
+        return HTMLResponse(
+            f'<div class="claim-check-failed">'
+            f'<strong>🔒 Sin control:</strong> Este hilo está en uso por '
+            f'<strong>{claim["display_name"] or "otro operador"}</strong>. '
+            f'<button hx-get="/inbox/thread/{thread_id}" hx-target="#inbox-panel" '
+            f'hx-swap="innerHTML">Actualizar</button></div>'
+        )
 
     result = reprocess_thread_ai(
         db,

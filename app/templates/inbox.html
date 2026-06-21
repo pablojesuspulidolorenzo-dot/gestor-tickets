@@ -55,7 +55,11 @@
             </div>
         </div>
 
-        <div class="inbox-thread-list" id="inbox-thread-list">
+        <div class="inbox-thread-list" id="inbox-thread-list"
+             hx-get="/inbox/threads"
+             hx-trigger="every 60s, refreshThreadList from:body"
+             hx-vals='js:{"filter": document.getElementById("inbox-active-filter")?.value || "pending"}'
+             hx-swap="innerHTML">
             {% include "partials/inbox_thread_rows.html" %}
         </div>
     </aside>

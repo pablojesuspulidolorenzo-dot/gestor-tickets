@@ -1437,3 +1437,161 @@ body:has(.inbox-shell) .inbox-shell { flex: 1; min-height: 0; height: auto; }
     transition: background .12s;
 }
 .inbox-operator-exit-btn:hover { background: rgba(255,0,0,.18); color: #fff; }
+
+/* ── v0.1.74 Claim bar + control transfer + disabled actions ─────────────── */
+
+/* Barra de claim del hilo */
+.inbox-claim-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 14px;
+    font-size: .78rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+.inbox-claim-bar.is-owned {
+    background: #f0fdf4;
+    border-bottom-color: #bbf7d0;
+    color: #166534;
+}
+.inbox-claim-bar.is-blocked {
+    background: #fff7ed;
+    border-bottom-color: #fed7aa;
+    color: #9a3412;
+}
+.inbox-claim-bar.is-free {
+    background: #f8fafc;
+    border-bottom-color: #e2e8f0;
+    color: #64748b;
+}
+.inbox-claim-icon { font-size: .9rem; flex-shrink: 0; }
+.inbox-claim-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Botón pin (reservar/quitar reserva) */
+.inbox-pin-btn {
+    flex-shrink: 0;
+    font-size: .7rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1.5px solid #166534;
+    background: transparent;
+    color: #166534;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    white-space: nowrap;
+}
+.inbox-pin-btn:hover { background: #166534; color: #fff; }
+.inbox-pin-btn.is-pinned { background: #166534; color: #fff; }
+
+/* Botón liberar */
+.inbox-release-btn {
+    flex-shrink: 0;
+    font-size: .7rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1.5px solid #dc2626;
+    background: transparent;
+    color: #dc2626;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    white-space: nowrap;
+}
+.inbox-release-btn:hover { background: #dc2626; color: #fff; }
+
+/* Botón solicitar control */
+.inbox-request-control-btn {
+    flex-shrink: 0;
+    font-size: .7rem;
+    padding: 2px 10px;
+    border-radius: 999px;
+    border: 1.5px solid #9a3412;
+    background: transparent;
+    color: #9a3412;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    white-space: nowrap;
+}
+.inbox-request-control-btn:hover { background: #9a3412; color: #fff; }
+
+/* Etiquetas de estado de solicitud */
+.inbox-ctrl-pending-label {
+    font-size: .7rem; color: #92400e; font-style: italic;
+}
+.inbox-ctrl-denied-label {
+    font-size: .7rem; color: #dc2626; font-weight: 600;
+}
+
+/* Botones de acción desactivados */
+.inbox-action-disabled {
+    opacity: .45 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+}
+
+/* Notificación de solicitud de control entrante */
+.inbox-ctrl-request-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    background: #fef3c7;
+    border-bottom: 2px solid #f59e0b;
+    font-size: .8rem;
+    color: #78350f;
+    animation: inbox-ctrl-pulse 1.2s ease-in-out 3;
+}
+@keyframes inbox-ctrl-pulse {
+    0%, 100% { background: #fef3c7; }
+    50% { background: #fde68a; }
+}
+.inbox-ctrl-request-icon { font-size: 1rem; flex-shrink: 0; }
+.inbox-ctrl-request-text { flex: 1; }
+.inbox-ctrl-grant-btn {
+    flex-shrink: 0;
+    font-size: .7rem;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: none;
+    background: #16a34a;
+    color: #fff;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background .12s;
+}
+.inbox-ctrl-grant-btn:hover { background: #15803d; }
+.inbox-ctrl-deny-btn {
+    flex-shrink: 0;
+    font-size: .7rem;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1.5px solid #6b7280;
+    background: transparent;
+    color: #6b7280;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.inbox-ctrl-deny-btn:hover { background: #6b7280; color: #fff; }
+
+/* Aviso de verificación fallida en botones de acción */
+.claim-check-failed {
+    padding: 10px 14px;
+    background: #fef2f2;
+    border: 1.5px solid #fecaca;
+    border-radius: 8px;
+    font-size: .85rem;
+    color: #991b1b;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 8px 0;
+}
+.claim-check-failed button {
+    font-size: .75rem;
+    padding: 2px 10px;
+    border-radius: 6px;
+    border: 1.5px solid #991b1b;
+    background: transparent;
+    color: #991b1b;
+    cursor: pointer;
+}

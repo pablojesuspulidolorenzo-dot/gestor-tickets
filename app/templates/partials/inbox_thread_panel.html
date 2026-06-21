@@ -2,6 +2,11 @@
 {% set glpi_priority_map = {1: "Muy baja", 2: "Baja", 3: "Media", 4: "Alta", 5: "Muy alta", 6: "Mayor"} %}
 {% set _op_mode = operator_mode | default(false) %}
 {% set _op_pending = operator_pending_count | default(0) %}
+{% set _claim = claim_info | default(none) %}
+{% set _uid = current_user_id | default(0) %}
+{% set _i_own = (not _claim) or (_claim and _claim.user_id == _uid) %}
+{% set _blocked = _claim and _claim.user_id != _uid %}
+{% set _can_act = _i_own %}
 
 <!-- Barra modo operador (solo en modo ASISTENCIA) -->
 {% if _op_mode %}
@@ -95,6 +100,67 @@
          hx-swap="innerHTML"></div>
 </div>
 
+<!-- Contenedor de notificaciones de solicitudes de control entrantes -->
+<div id="inbox-control-request-notif"></div>
+
+<!-- Barra de control del hilo -->
+{% if _claim %}
+<div class="inbox-claim-bar {% if _i_own %}is-owned{% else %}is-blocked{% endif %}" x-show="view !== 'emails'" x-cloak>
+    {% if _i_own %}
+        <span class="inbox-claim-icon">🔒</span>
+        <span class="inbox-claim-text">Tienes el control{% if _claim.is_pinned %} · <strong>Reservado</strong>{% endif %}</span>
+        <button class="inbox-pin-btn {% if _claim.is_pinned %}is-pinned{% endif %}"
+                hx-post="/threads/{{ thread.id }}/pin-claim?op={{ '1' if _op_mode else '0' }}"
+                hx-target="#inbox-panel"
+                hx-swap="innerHTML"
+                title="{{ 'Quitar reserva del hilo' if _claim.is_pinned else 'Reservar hilo: mantener control aunque cambies de hilo' }}">
+            {{ '📌 Reservado' if _claim.is_pinned else '📌 Reservar' }}
+        </button>
+        <button class="inbox-release-btn"
+                hx-post="/threads/{{ thread.id }}/release-claim?op={{ '1' if _op_mode else '0' }}"
+                hx-target="#inbox-panel"
+                hx-swap="innerHTML"
+                title="Liberar control del hilo">
+            Liberar
+        </button>
+    {% else %}
+        <span class="inbox-claim-icon">🔒</span>
+        <span class="inbox-claim-text">En uso por <strong>{{ _claim.display_name or 'otro operador' }}</strong></span>
+        {% set _my_req = my_control_request | default(none) %}
+        {% if _my_req == 'pending' %}
+            <span class="inbox-ctrl-pending-label">Solicitud enviada…</span>
+        {% elif _my_req == 'denied' %}
+            <span class="inbox-ctrl-denied-label">Control denegado</span>
+            <button class="inbox-request-control-btn"
+                    hx-post="/threads/{{ thread.id }}/request-control?op={{ '1' if _op_mode else '0' }}"
+                    hx-target="#inbox-panel"
+                    hx-swap="innerHTML">
+                Reintentar
+            </button>
+        {% else %}
+            <button class="inbox-request-control-btn"
+                    hx-post="/threads/{{ thread.id }}/request-control?op={{ '1' if _op_mode else '0' }}"
+                    hx-target="#inbox-panel"
+                    hx-swap="innerHTML">
+                Solicitar control
+            </button>
+        {% endif %}
+    {% endif %}
+</div>
+{% elif _op_mode %}
+{# Sin claim en modo operador: botón para reclamar manualmente #}
+<div class="inbox-claim-bar is-free" x-show="view !== 'emails'" x-cloak>
+    <span class="inbox-claim-icon">🔓</span>
+    <span class="inbox-claim-text">Hilo libre</span>
+    <button class="inbox-request-control-btn"
+            hx-post="/threads/{{ thread.id }}/claim?op=1"
+            hx-target="#inbox-panel"
+            hx-swap="innerHTML">
+        Reclamar
+    </button>
+</div>
+{% endif %}
+
 <!-- Pestañas — 6 vistas; pills ultracompactos en modo correos -->
 <div class="inbox-view-toggle">
     <div class="inbox-view-tabs" :class="{ 'is-compact': view === 'emails' }">
@@ -149,6 +215,7 @@
         <section class="inbox-panel-section">
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
                 <h3 class="inbox-section-title" style="margin:0; flex:1;">Análisis IA del hilo</h3>
+                {% if _can_act %}
                 <button class="secondary-button"
                         style="font-size:.8rem; padding:5px 12px;"
                         hx-post="/threads/{{ thread.id }}/synthesize-ai"
@@ -168,6 +235,16 @@
                         title="Reprocesar todos los correos del hilo con IA en orden cronológico y regenerar la síntesis">
                     Reprocesar hilo ↺
                 </button>
+                {% else %}
+                <button class="secondary-button inbox-action-disabled"
+                        disabled title="Otro operador tiene el control de este hilo">
+                    Sintetizar
+                </button>
+                <button class="secondary-button inbox-action-disabled"
+                        disabled title="Otro operador tiene el control de este hilo">
+                    Reprocesar hilo ↺
+                </button>
+                {% endif %}
                 <span id="inbox-ai-spinner" class="htmx-indicator ai-spinner"> IA…</span>
             </div>
 
@@ -320,7 +397,7 @@
             <p class="pane-empty-text">Sin tickets GLPI vinculados a este hilo.</p>
             {% endif %}
 
-            <details class="inbox-glpi-create" style="margin-top:14px;">
+            <details class="inbox-glpi-create" style="margin-top:14px;" {% if _blocked %}hidden{% endif %}>
                 <summary style="cursor:pointer; font-weight:700; color:var(--primary-dark);">Crear ticket GLPI</summary>
                 <div style="margin-top:12px;">
                     {% if assistant_mode %}

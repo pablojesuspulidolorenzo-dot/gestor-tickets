@@ -2,6 +2,7 @@
 {% set is_waiting = thread.get('is_waiting') %}
 {% set others = thread.get('others_viewing', 0) %}
 {% set claimed_by = thread.get('operator_claimed_by') %}
+{% set claim_name = thread.get('operator_claim_name') or 'un operador' %}
 {% set last_dir = thread.get('last_direction') %}
 <a class="inbox-thread-row{% if is_waiting %} is-waiting{% endif %}{% if claimed_by %} is-claimed{% endif %}"
    href="/inbox?thread_id={{ thread.id }}"
@@ -9,7 +10,7 @@
    hx-target="#inbox-panel"
    hx-swap="innerHTML"
    hx-push-url="/inbox?thread_id={{ thread.id }}"
-   :hx-vals="JSON.stringify({ op: operatorMode ? 1 : 0 })">
+   :hx-vals="JSON.stringify({ op: operatorMode ? 1 : 0, claim: operatorMode ? 1 : 0 })">
     <div class="inbox-thread-row-top">
         <span class="inbox-thread-title">{{ thread.title or "(Sin asunto)" }}</span>
         <span class="inbox-thread-row-badges">
@@ -20,7 +21,7 @@
             <span class="inbox-waiting-dot" title="En espera{% if thread.get('waiting_until') %} hasta {{ (thread.waiting_until | string)[:10] }}{% endif %}">⏳</span>
             {% endif %}
             {% if claimed_by %}
-            <span class="inbox-claimed-dot" title="En atención por un operador">🔒</span>
+            <span class="inbox-claimed-dot" title="En atención por {{ claim_name }}">🔒</span>
             {% endif %}
             {% if last_dir == 'inbound' %}
             <span class="inbox-dir-badge is-inbound" title="Último correo: recibido">↙</span>
