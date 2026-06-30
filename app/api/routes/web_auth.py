@@ -159,6 +159,7 @@ def _template_context(request: Request, **extra):
         "version": get_version_metadata(),
         "htmx_local": True,
         "assistant_mode": bool(session_user.get("assistant_mode", True)),
+        "theme": request.session.get("theme", "light"),
     }
     context.update(extra)
     return context
@@ -3930,6 +3931,45 @@ def transfer_email_route(
         url=f"/personal?personal_account_id={personal_account_id}&mailbox={mailbox}&message=transferred",
         status_code=303,
     )
+
+
+@router.get("/settings/tema", response_class=HTMLResponse)
+def settings_tema_page(
+    request: Request,
+    message: str | None = None,
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    return templates.TemplateResponse(
+        request=request,
+        name="settings_tema.html",
+        context=_template_context(
+            request,
+            user=user,
+            active_section="settings",
+            active_settings_section="tema",
+            current_theme=request.session.get("theme", "light"),
+            message=message,
+        ),
+    )
+
+
+@router.post("/settings/tema", response_class=HTMLResponse)
+def settings_tema_save(
+    request: Request,
+    theme: str = Form(...),
+):
+    user = require_session_user(request)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    if theme not in ("light", "dark"):
+        theme = "light"
+
+    request.session["theme"] = theme
+    return RedirectResponse(url="/settings/tema?message=saved", status_code=303)
 
 
 @router.post("/settings/assistant-mode", response_class=HTMLResponse)

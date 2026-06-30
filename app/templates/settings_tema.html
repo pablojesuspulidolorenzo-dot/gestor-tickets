@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Tema — Configuración — Gestor Tickets{% endblock %}
+
+{% block content %}
+{% include "partials/nav.html" %}
+{% with active_settings_section='tema' %}{% include "partials/settings_subnav.html" %}{% endwith %}
+
+<main style="padding: 28px; max-width: 680px; margin: 0 auto;">
+
+    {% if message == 'saved' %}
+    <div class="scheduled-alert scheduled-alert-success" style="margin-bottom: 18px;">
+        Tema guardado. El cambio se aplica en toda la sesión.
+    </div>
+    {% endif %}
+
+    <section class="email-body-card">
+        <div style="margin-bottom: 20px;">
+            <h2 style="margin: 0 0 6px; font-size: 1rem; letter-spacing: -.015em;">Apariencia</h2>
+            <p style="margin: 0; color: var(--text-secondary); font-size: .88rem; line-height: 1.55;">
+                Elige el tema visual de la interfaz. El cambio se aplica inmediatamente en esta sesión.
+            </p>
+        </div>
+
+        <form method="post" action="/settings/tema" id="theme-form">
+            <div class="theme-selector">
+
+                <!-- ── Tema Claro ── -->
+                <label class="theme-card {% if current_theme == 'light' %}is-selected{% endif %}" id="card-light">
+                    <input type="radio" name="theme" value="light"
+                           {% if current_theme == 'light' %}checked{% endif %}
+                           onchange="document.getElementById('theme-form').submit()">
+                    <div class="theme-preview theme-preview-light">
+                        <div class="tp-header">
+                            <div class="tp-logo"></div>
+                            <div class="tp-nav"></div>
+                            <div class="tp-nav-ghost"></div>
+                            <div class="tp-nav-ghost"></div>
+                        </div>
+                        <div class="tp-body">
+                            <div class="tp-list">
+                                <div class="tp-row" style="margin-top:6px;"></div>
+                                <div class="tp-row"></div>
+                                <div class="tp-row"></div>
+                            </div>
+                            <div class="tp-panel">
+                                <div class="tp-row" style="margin-top:6px;width:70%;"></div>
+                                <div class="tp-row" style="width:90%;"></div>
+                                <div class="tp-row" style="width:50%;background:#2563eb30;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="theme-card-label">
+                        <span class="theme-card-icon">☀️</span>
+                        <div>
+                            <div class="theme-card-name">Claro</div>
+                            <div class="theme-card-desc">Azul grisáceo sobre fondo blanco</div>
+                        </div>
+                        <span class="theme-selected-check">✓</span>
+                    </div>
+                </label>
+
+                <!-- ── Tema Oscuro ── -->
+                <label class="theme-card {% if current_theme == 'dark' %}is-selected{% endif %}" id="card-dark">
+                    <input type="radio" name="theme" value="dark"
+                           {% if current_theme == 'dark' %}checked{% endif %}
+                           onchange="document.getElementById('theme-form').submit()">
+                    <div class="theme-preview theme-preview-dark">
+                        <div class="tp-header">
+                            <div class="tp-logo"></div>
+                            <div class="tp-nav"></div>
+                            <div class="tp-nav-ghost"></div>
+                            <div class="tp-nav-ghost"></div>
+                        </div>
+                        <div class="tp-body">
+                            <div class="tp-list">
+                                <div class="tp-row" style="margin-top:6px;"></div>
+                                <div class="tp-row"></div>
+                                <div class="tp-row"></div>
+                            </div>
+                            <div class="tp-panel">
+                                <div class="tp-row" style="margin-top:6px;width:70%;"></div>
+                                <div class="tp-row" style="width:90%;"></div>
+                                <div class="tp-row" style="width:50%;background:#3b82f630;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="theme-card-label">
+                        <span class="theme-card-icon">🌙</span>
+                        <div>
+                            <div class="theme-card-name">Oscuro</div>
+                            <div class="theme-card-desc">Azul profundo sobre fondo slate</div>
+                        </div>
+                        <span class="theme-selected-check">✓</span>
+                    </div>
+                </label>
+
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; margin-top: 4px;">
+                <button type="submit" class="primary-button" style="min-width: 130px;">
+                    Guardar tema
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <section class="email-body-card" style="margin-top: 18px;">
+        <h3 style="margin: 0 0 10px; font-size: .9rem;">Acerca del tema oscuro</h3>
+        <p style="margin: 0; font-size: .85rem; color: var(--text-secondary); line-height: 1.65;">
+            El tema oscuro reduce la fatiga visual en entornos con poca luz. Todos los elementos
+            de la interfaz — bandeja, cronología, síntesis IA, tickets GLPI y formularios —
+            se adaptan automáticamente. El ajuste se guarda en la sesión y se mantiene
+            mientras no cierres sesión.
+        </p>
+    </section>
+
+</main>
+{% endblock %}
